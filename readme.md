@@ -40,24 +40,6 @@ Every term includes:
 
 ---
 
-## Tech
-
-Zero dependencies. No build step. No framework.
-
-```
-index.html   ← entire site lives here
-CNAME        ← largelanguagemodel.in (auto-created by GitHub Pages)
-README.md    ← you are here
-```
-
-- Pure HTML + CSS + JS
-- Instant client-side search (vanilla JS)
-- Schema.org `DefinedTermSet` markup for SEO
-- GitHub Pages hosted — no server, no backend, no cost
-- Sub-100KB total page weight
-
----
-
 ## Run locally
 
 ```bash
