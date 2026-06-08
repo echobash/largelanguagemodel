@@ -6,6 +6,9 @@
 
 ---
 
+<kbd><img width="1436" height="778" alt="Screenshot 2026-06-09 at 2 13 07 AM" src="https://github.com/user-attachments/assets/dad17d80-9f24-46ed-bad5-8ac31dd93f0f" /></kbd>
+
+
 ## What is this?
 
 Most LLM resources are written for researchers, not developers. This is a no-jargon, no-fluff glossary built for backend engineers, full-stack devs, and platform engineers who are entering the AI/LLM space and need clear, practical explanations — not academic abstractions.
