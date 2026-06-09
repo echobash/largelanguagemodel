@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tokenization — llm-kit</title>
+  <link rel="stylesheet" href="../css/main.css" />
+  <style>
+    .tok-input-row { display:flex; gap:10px; margin-bottom:20px; flex-wrap:wrap; }
+    .tok-input { flex:1; min-width:200px; }
+    .tokenize-btn {
+      padding:11px 22px; border-radius:var(--r-md); font-family:var(--mono); font-size:14px; font-weight:700;
+      background:var(--purple); color:#0d0520; border:none; cursor:pointer; white-space:nowrap;
+      transition:all .2s;
+    }
+    .tokenize-btn:hover { background:#c4b5fd; transform:translateY(-1px); }
+
+    .tok-chips { display:flex; gap:6px; flex-wrap:wrap; margin:12px 0; min-height:40px; }
+    .tok-chip {
+      padding:6px 12px; border-radius:var(--r-md); font-family:var(--mono); font-size:13px;
+      font-weight:600; border:2px solid; cursor:default;
+      animation:pop-in .3s var(--ease) both;
+    }
+    @keyframes pop-in { from{opacity:0;transform:scale(.7)} to{opacity:1;transform:scale(1)} }
+
+    .tok-ids { display:flex; gap:6px; flex-wrap:wrap; margin:8px 0; }
+    .tok-id {
+      padding:4px 10px; border-radius:var(--r-sm); font-family:var(--mono); font-size:11px;
+      background:rgba(255,255,255,.05); border:1px solid var(--border2); color:var(--faint);
+    }
+
+    .tok-stats { display:flex; gap:16px; flex-wrap:wrap; margin:16px 0; }
+    .tok-stat {
+      background:var(--bg2); border:1px solid var(--border2); border-radius:var(--r-lg);
+      padding:12px 16px; font-family:var(--mono);
+    }
+    .tok-stat-num { font-size:22px; font-weight:700; color:var(--purple); }
+    .tok-stat-lbl { font-size:10px; color:var(--faint); text-transform:uppercase; letter-spacing:.08em; margin-top:2px; }
+
+    .tok-table-wrap { overflow-x:auto; }
+    .tok-table { width:100%; border-collapse:collapse; font-family:var(--mono); font-size:12px; }
+    .tok-table th { padding:8px 12px; color:var(--faint); text-align:left; border-bottom:1px solid var(--border); font-size:10px; text-transform:uppercase; letter-spacing:.1em; }
+    .tok-table td { padding:10px 12px; border-bottom:1px solid var(--border); }
+    .tok-table tr:last-child td { border-bottom:none; }
+    .tok-table tr:hover td { background:var(--purple-dim); }
+
+    .examples-row { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+    .ex-btn {
+      padding:6px 14px; border-radius:var(--r-md); font-family:var(--mono); font-size:12px;
+      border:1px solid var(--border2); color:var(--muted); background:transparent; cursor:pointer; transition:all .15s;
+    }
+    .ex-btn:hover { background:var(--purple-dim); border-color:rgba(167,139,250,.3); color:var(--purple); }
+
+    .tok-split-vis { margin:12px 0; }
+    .split-word {
+      display:inline-flex; align-items:center; margin:3px 6px 3px 0;
+      border:1px solid var(--border); border-radius:var(--r-sm); overflow:hidden;
+      font-family:var(--mono); font-size:13px;
+    }
+    .split-part { padding:4px 8px; border-right:1px dashed rgba(255,255,255,.15); }
+    .split-part:last-child { border-right:none; }
+  </style>
+</head>
+<body>
+<canvas id="ai-canvas" style="opacity:.15;"></canvas>
+<div class="grid-bg"></div>
+<div class="blob blob-3" style="opacity:.3;"></div>
+
+<nav class="nav scrolled">
+  <a class="nav-brand" href="../index.html"><span class="nav-brand-name">llm-kit</span><span class="nav-brand-by">@echobash</span></a>
+  <ul class="nav-links">
+    <li><a href="../index.html">home</a></li>
+    <li><a href="llm.html">llm</a></li>
+    <li><a href="tokens.html" class="active">tokens</a></li>
+    <li><a href="embeddings.html">embeddings</a></li>
+  </ul>
+</nav>
+
+<div class="tool-wrap">
+  <div class="tool-title">tokenization</div>
+  <div class="tool-sub">// AI can't read words — it reads numbers. Tokenization converts text to numbers.</div>
+
+  <div style="background:rgba(167,139,250,.06);border:1px solid rgba(167,139,250,.2);border-radius:var(--r-lg);padding:14px 18px;margin-bottom:24px;font-family:var(--mono);font-size:13px;color:var(--muted);line-height:1.7;">
+    💡 <strong style="color:var(--purple);">The core idea:</strong> Computers can only work with numbers, not words. So before an AI can read your message, it splits the text into chunks called "tokens" and gives each one a number. "Hello world" might become [15339, 995].
+  </div>
+
+  <div class="tok-input-row">
+    <input class="input tok-input" id="tok-input" type="text" placeholder="Type anything… e.g. Hello world! I love AI." value="Hello world! I love AI." />
+    <button class="tokenize-btn" onclick="tokenize()">tokenize →</button>
+  </div>
+
+  <div style="font-family:var(--mono);font-size:11px;color:var(--faint);margin-bottom:8px;">TRY THESE EXAMPLES:</div>
+  <div class="examples-row">
+    <button class="ex-btn" onclick="setEx('Hello world!')">Hello world!</button>
+    <button class="ex-btn" onclick="setEx('ChatGPT is amazing')">ChatGPT is amazing</button>
+    <button class="ex-btn" onclick="setEx('unbelievable')">unbelievable</button>
+    <button class="ex-btn" onclick="setEx('1234567890')">1234567890</button>
+    <button class="ex-btn" onclick="setEx('AI is transforming everything')">AI is transforming everything</button>
+    <button class="ex-btn" onclick="setEx('supercalifragilisticexpialidocious')">long word</button>
+  </div>
+
+  <div id="results" style="display:none;">
+    <div class="tok-stats" id="tok-stats"></div>
+
+    <div class="section-label" style="margin-top:20px;">token breakdown</div>
+    <div style="font-family:var(--mono);font-size:12px;color:var(--faint);margin-bottom:10px;">
+      Each colored block = one token. Notice how some words split into multiple pieces!
+    </div>
+    <div class="tok-chips" id="tok-chips"></div>
+
+    <div style="font-family:var(--mono);font-size:12px;color:var(--faint);margin:12px 0 6px;">TOKEN IDs (numbers sent to the AI)</div>
+    <div class="tok-ids" id="tok-ids"></div>
+
+    <div class="section-label" style="margin-top:24px;">word splitting examples in this text</div>
+    <div style="font-family:var(--mono);font-size:12px;color:var(--muted);margin-bottom:10px;">
+      Long or unusual words get split into smaller pieces. Each piece is a token.
+    </div>
+    <div class="tok-split-vis" id="tok-split"></div>
+
+    <div class="section-label" style="margin-top:24px;">token details</div>
+    <div class="tok-table-wrap">
+      <table class="tok-table" id="tok-table">
+        <thead><tr><th>#</th><th>Token</th><th>Bytes</th><th>Token ID</th><th>Notes</th></tr></thead>
+        <tbody id="tok-table-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="explain-panel" style="margin-top:20px;">
+    <div class="explain-step" id="exp-step">What is a token?</div>
+    <div class="explain-text" id="exp-text">A token is a small piece of text — usually a word or part of a word. AI models don't read full words — they read tokens. "tokenization" might become ["token", "ization"] — two tokens. Common words like "the" are usually one token. Rare or long words get split into smaller pieces. The AI turns each token into a number to process it.</div>
+    <div class="explain-tags" id="exp-tags"><span class="tag tag-p">BEGINNER FRIENDLY</span></div>
+  </div>
+</div><!-- ── Also by echobash strip ── -->
+<div class="also-strip">
+  <div class="also-inner">
+    <span class="also-label">also by echobash</span>
+    <div class="also-divider"></div>
+    <div class="also-links">
+      <a href="https://devdunia.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--cyan);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">devdunia</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">networking tools</span>
+      </a>
+      <a href="https://echobash.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--purple);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">echobash</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">portfolio</span>
+      </a>
+      <a href="https://promptflix.in" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--amber);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">promptflix</span><span class="also-link-tld">.in</span>
+        <span class="also-link-sub">prompt library</span>
+      </a>
+    </div>
+  </div>
+</div>
+<footer class="footer">
+  <p>built by echobash &nbsp;·&nbsp; <a href="https://devdunia.com" target="_blank" rel="noopener">devdunia.com</a> &nbsp;·&nbsp; <a href="https://echobash.com" target="_blank" rel="noopener">echobash.com</a> &nbsp;·&nbsp; <a href="https://promptflix.in" target="_blank" rel="noopener">promptflix.in</a></p>
+  <p style="margin-top:4px;">llm-kit is open source — AI tools for everyone</p>
+</footer>
+
+<script>
+var COLORS = [
+  ['rgba(167,139,250,.7)','rgba(167,139,250,.15)'],
+  ['rgba(56,189,248,.7)','rgba(56,189,248,.12)'],
+  ['rgba(74,222,128,.7)','rgba(74,222,128,.12)'],
+  ['rgba(251,191,36,.7)','rgba(251,191,36,.12)'],
+  ['rgba(244,114,182,.7)','rgba(244,114,182,.12)'],
+];
+
+// Simplified BPE-like tokenizer simulation (tiktoken-inspired)
+var VOCAB = {
+  ' the':1257,' of':315,' and':290,' to':284,' a':264,' in':287,' is':318,' it':340,' that':326,' he':339,
+  ' was':373,' for':329,' on':319,' are':366,' as':355,' with':351,' his':342,' they':484,' at':379,' be':307,
+  ' Hello':15339,' world':1917,' !':0,' I':40,' love':3021,' AI':15682,'.':13,',':11,' amazing':5387,
+  ' un':440,' be':307,' liev':47173,' able':481,' super':2208,' cal':6359,' if':333,' rag':32768,
+  ' il':560,' is':318,' tic':1557,' exp':3207,' ial':37765,' id':307,' oc':4744,' ious':3199,
+  ' Chat':28775,' G':38,'PT':5265,' transform':4121,'ing':278,' every':1990,'thing':1517,
+  ' 1':16,' 2':17,' 3':18,' 4':19,' 5':20,' 6':21,' 7':22,' 8':23,' 9':24,' 0':15,
+  '1':16,'2':17,'3':18,'4':19,'5':20,'6':21,'7':22,'8':23,'9':24,'0':15,
+  'Hello':15339,'world':1917,'!':0,'I':40,'love':3021,'AI':15682,
+};
+
+// Simplified tokenization
+function simpleTokenize(text) {
+  var tokens = [];
+  var colors_used = {};
+  var colorIdx = 0;
+
+  // Very simplified — split by spaces but keep punctuation separate
+  var words = text.match(/\s*[A-Za-z0-9']+|\s*[^A-Za-z0-9\s]+|\n/g) || [];
+
+  words.forEach(function(w) {
+    var subTokens = splitWord(w.trim());
+    var prefix = w.match(/^\s+/) ? w.match(/^\s+/)[0] : '';
+    subTokens.forEach(function(st, i) {
+      var display = (i === 0 ? prefix : '') + st;
+      if (!colors_used[st]) { colors_used[st] = COLORS[colorIdx % COLORS.length]; colorIdx++; }
+      var id = Math.abs(hashCode(st)) % 100000 + 100;
+      tokens.push({ text: display || st, id: id, bytes: new TextEncoder().encode(st).length, split: subTokens.length > 1 });
+    });
+  });
+  return tokens;
+}
+
+function splitWord(w) {
+  if (!w) return [];
+  if (w.length <= 4) return [w];
+  // Simulate BPE: common suffixes get split
+  var suffixes = ['ing','tion','able','ious','ment','ness','ful','less','ness','ize','ism','ist','ize'];
+  for (var s of suffixes) {
+    if (w.endsWith(s) && w.length > s.length + 2) {
+      return [w.slice(0, w.length - s.length), s];
+    }
+  }
+  var prefixes = ['un','re','pre','dis','mis','over','under','out','super'];
+  for (var p of prefixes) {
+    if (w.startsWith(p) && w.length > p.length + 3) {
+      return [p, w.slice(p.length)];
+    }
+  }
+  if (w.length > 10) {
+    var mid = Math.floor(w.length / 2);
+    return [w.slice(0,mid), w.slice(mid)];
+  }
+  return [w];
+}
+
+function hashCode(s) {
+  var h = 0;
+  for (var i = 0; i < s.length; i++) { h = (h * 31 + s.charCodeAt(i)) | 0; }
+  return h;
+}
+
+function setEx(text) { document.getElementById('tok-input').value = text; tokenize(); }
+
+function tokenize() {
+  var text = document.getElementById('tok-input').value;
+  if (!text.trim()) return;
+  var tokens = simpleTokenize(text);
+  document.getElementById('results').style.display = '';
+
+  // Stats
+  var charCount = text.length;
+  var avgTokLen = (charCount / tokens.length).toFixed(1);
+  document.getElementById('tok-stats').innerHTML =
+    stat(tokens.length, 'tokens') +
+    stat(charCount, 'characters') +
+    stat(Math.round(charCount / 4), 'approx tokens (÷4 rule)') +
+    stat('~$' + (tokens.length * 0.00003).toFixed(5), 'GPT-4o cost');
+
+  // Token chips
+  var chipsHtml = '';
+  tokens.forEach(function(t, i) {
+    var c = COLORS[i % COLORS.length];
+    chipsHtml += '<div class="tok-chip" style="border-color:'+c[0]+';background:'+c[1]+';color:'+c[0]+';animation-delay:'+(i*0.05)+'s">'+escapeHtml(t.text)+'</div>';
+  });
+  document.getElementById('tok-chips').innerHTML = chipsHtml;
+
+  // Token IDs
+  var idsHtml = tokens.map(function(t) {
+    return '<div class="tok-id">'+t.id+'</div>';
+  }).join('');
+  document.getElementById('tok-ids').innerHTML = idsHtml;
+
+  // Split visualization
+  var splitWords = {};
+  tokens.forEach(function(t) { if (t.split) splitWords[t.text.trim()] = true; });
+  var text2 = text;
+  var splitHtml = '<div style="font-family:var(--mono);font-size:12px;color:var(--muted);">Words split into multiple tokens: </div>';
+  var seen = {};
+  tokens.forEach(function(t, i) {
+    if (t.split && !seen[t.text.trim()]) {
+      seen[t.text.trim()] = true;
+    }
+  });
+  // Group consecutive tokens from same word
+  var groups = [];
+  var cur = null;
+  tokens.forEach(function(t) {
+    groups.push([t]);
+  });
+  var multiHtml = '';
+  var wordGroups = groupByWord(tokens, text);
+  wordGroups.filter(function(g){return g.length>1;}).slice(0,8).forEach(function(g) {
+    multiHtml += '<span class="split-word">';
+    g.forEach(function(t, i) {
+      var c = COLORS[i % COLORS.length];
+      multiHtml += '<span class="split-part" style="background:'+c[1]+';color:'+c[0]+';">'+escapeHtml(t.text)+'</span>';
+    });
+    multiHtml += '</span>';
+  });
+  if (!multiHtml) multiHtml = '<span style="color:var(--faint);font-family:var(--mono);font-size:12px;">All words in this text fit as single tokens 👍</span>';
+  document.getElementById('tok-split').innerHTML = multiHtml;
+
+  // Table
+  var tbodyHtml = '';
+  tokens.forEach(function(t, i) {
+    var c = COLORS[i % COLORS.length];
+    var notes = [];
+    if (t.text.trim() === '') notes.push('whitespace');
+    if (t.split) notes.push('part of longer word');
+    if (!t.split && t.text.trim().length > 0) notes.push('whole token');
+    tbodyHtml += '<tr>';
+    tbodyHtml += '<td style="color:var(--faint);">'+(i+1)+'</td>';
+    tbodyHtml += '<td><span style="background:'+c[1]+';color:'+c[0]+';padding:2px 8px;border-radius:3px;font-family:var(--mono);">'+escapeHtml(t.text)+'</span></td>';
+    tbodyHtml += '<td style="color:var(--faint);">'+t.bytes+'</td>';
+    tbodyHtml += '<td style="color:var(--cyan);">'+t.id+'</td>';
+    tbodyHtml += '<td style="color:var(--faint);">'+notes.join(', ')+'</td>';
+    tbodyHtml += '</tr>';
+  });
+  document.getElementById('tok-table-body').innerHTML = tbodyHtml;
+
+  document.getElementById('exp-step').textContent = 'Result: "' + text.slice(0,30) + (text.length > 30 ? '…' : '') + '" = ' + tokens.length + ' tokens';
+  document.getElementById('exp-text').textContent = 'Your text was split into ' + tokens.length + ' tokens. ' + (tokens.length > text.split(' ').length ? 'Some words were split into multiple tokens — this usually happens with long words, uncommon words, or numbers.' : 'Most words became a single token, which means they\'re common enough to have their own entry in the AI\'s vocabulary.') + ' The AI never sees your original text — it only sees the token ID numbers.';
+  document.getElementById('exp-tags').innerHTML = '<span class="tag tag-p">'+tokens.length+' TOKENS</span><span class="tag tag-c">'+text.length+' CHARS</span><span class="tag tag-a">RATIO '+(text.length/tokens.length).toFixed(1)+' chars/token</span>';
+}
+
+function groupByWord(tokens, text) {
+  var groups = [];
+  var cur = [];
+  var isBuilding = false;
+  tokens.forEach(function(t) {
+    if (t.split) { cur.push(t); isBuilding = true; }
+    else { if (isBuilding && cur.length > 1) groups.push(cur); cur = []; isBuilding = false; }
+  });
+  if (isBuilding && cur.length > 1) groups.push(cur);
+  return groups;
+}
+
+function stat(num, lbl) {
+  return '<div class="tok-stat"><div class="tok-stat-num">'+num+'</div><div class="tok-stat-lbl">'+lbl+'</div></div>';
+}
+function escapeHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+tokenize();
+</script>
+<script>(function(){var c=document.getElementById('ai-canvas'),x=c.getContext('2d'),w,h,cols,drops;function r(){w=c.width=window.innerWidth;h=c.height=window.innerHeight;cols=Math.floor(w/14);drops=new Array(cols).fill(0).map(function(){return Math.floor(Math.random()*-60);});}r();window.addEventListener('resize',r);var f=0,CH='ABCabc123';function d(){f++;requestAnimationFrame(d);if(f%5!==0)return;x.fillStyle='rgba(6,1,15,0.1)';x.fillRect(0,0,w,h);x.font='11px JetBrains Mono,monospace';for(var i=0;i<cols;i++){x.fillStyle=Math.random()>.96?'rgba(251,191,36,0.2)':'rgba(251,191,36,0.04)';x.fillText(CH[Math.floor(Math.random()*CH.length)],i*14,drops[i]*14);if(drops[i]*14>h&&Math.random()>.975)drops[i]=0;else drops[i]++;}}requestAnimationFrame(d);})();</script>
+<script src="../js/main.js"></script>
+</body>
+</html>

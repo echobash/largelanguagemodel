@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Glossary — llm-kit</title>
+  <link rel="stylesheet" href="../css/main.css" />
+  <style>
+    .filter-row { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px; }
+    .filter-btn { padding:4px 12px; border-radius:99px; font-family:var(--mono); font-size:11px; border:1px solid var(--border2); background:transparent; color:var(--muted); cursor:pointer; transition:all .2s; }
+    .filter-btn.active, .filter-btn:hover { background:rgba(167,139,250,.15); border-color:rgba(167,139,250,.4); color:var(--purple); }
+    .search-input { width:100%; box-sizing:border-box; background:rgba(0,0,0,.3); border:1px solid var(--border2); border-radius:var(--r-md); padding:10px 14px; font-family:var(--mono); font-size:13px; color:var(--text); outline:none; margin-bottom:12px; }
+    .search-input:focus { border-color:rgba(167,139,250,.4); }
+    .search-input::placeholder { color:var(--faint); }
+
+    .glos-term   { padding:14px 0; border-bottom:1px solid rgba(255,255,255,.04); display:flex; gap:16px; }
+    .glos-term:last-child { border-bottom:none; }
+    .glos-word   { font-family:var(--mono); font-size:13px; font-weight:700; min-width:180px; flex-shrink:0; }
+    .glos-def    { font-family:var(--mono); font-size:12px; color:var(--muted); line-height:1.6; }
+    .glos-cat    { font-size:9px; padding:2px 7px; border-radius:99px; border:1px solid; margin-top:4px; display:inline-block; font-family:var(--mono); }
+    .glos-also   { font-size:11px; color:var(--faint); margin-top:4px; }
+    @media(max-width:600px){ .glos-term{flex-direction:column;gap:4px;} .glos-word{min-width:unset;} }
+    #glos-count  { font-family:var(--mono); font-size:11px; color:var(--faint); margin-bottom:8px; }
+  </style>
+</head>
+<body>
+<canvas id="ai-canvas" style="opacity:.15;"></canvas>
+<div class="grid-bg"></div>
+<div class="blob blob-2" style="opacity:.25;"></div>
+<nav class="nav scrolled">
+  <a class="nav-brand" href="../index.html"><span class="nav-brand-name">llm-kit</span><span class="nav-brand-by">@echobash</span></a>
+  <ul class="nav-links">
+    <li><a href="../index.html">home</a></li>
+    <li><a href="benchmark.html">benchmarks</a></li>
+    <li><a href="glossary.html" class="active">glossary</a></li>
+  </ul>
+</nav>
+<div class="tool-wrap">
+  <div class="tool-title">ai_glossary</div>
+  <div class="tool-sub">// 100+ AI/ML terms explained in plain English — no prior knowledge required</div>
+
+  <div style="background:rgba(167,139,250,.06);border:1px solid rgba(167,139,250,.25);border-radius:var(--r-lg);padding:14px 18px;margin-bottom:24px;font-family:var(--mono);font-size:13px;color:var(--muted);line-height:1.7;">
+    💡 Every term defined like you're encountering it for the first time. Search or filter by category.
+  </div>
+
+  <div class="stage">
+    <div class="stage-bar">
+      <div class="stage-bar-left"><span class="wp wp-r"></span><span class="wp wp-y"></span><span class="wp wp-g"></span></div>
+      <span class="stage-progress">100+ terms, plain English definitions</span>
+    </div>
+    <div class="stage-body">
+      <input class="search-input" type="text" id="glos-search" placeholder="Search terms... (e.g. 'attention', 'token', 'RLHF')" oninput="filterGlossary()">
+      <div class="filter-row" id="cat-filters"></div>
+      <div id="glos-count"></div>
+      <div id="glos-list"></div>
+    </div>
+  </div>
+
+  <div class="explain-panel">
+    <div class="explain-step">How to use this glossary</div>
+    <div class="explain-text">Type any term to search. Use category filters to browse by topic. Each term has a plain-English definition — no assumptions about prior knowledge. Some terms link to the interactive tools where you can explore them in depth.</div>
+    <div class="explain-tags"><span class="tag tag-p">100+ TERMS</span><span class="tag tag-c">SEARCHABLE</span><span class="tag tag-g">BEGINNER-FRIENDLY</span></div>
+  </div>
+</div><!-- ── Also by echobash strip ── -->
+<div class="also-strip">
+  <div class="also-inner">
+    <span class="also-label">also by echobash</span>
+    <div class="also-divider"></div>
+    <div class="also-links">
+      <a href="https://devdunia.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--cyan);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">devdunia</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">networking tools</span>
+      </a>
+      <a href="https://echobash.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--purple);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">echobash</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">portfolio</span>
+      </a>
+      <a href="https://promptflix.in" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--amber);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">promptflix</span><span class="also-link-tld">.in</span>
+        <span class="also-link-sub">prompt library</span>
+      </a>
+    </div>
+  </div>
+</div>
+<footer class="footer">
+  <p>built by echobash &nbsp;·&nbsp; <a href="https://devdunia.com" target="_blank" rel="noopener">devdunia.com</a> &nbsp;·&nbsp; <a href="https://echobash.com" target="_blank" rel="noopener">echobash.com</a> &nbsp;·&nbsp; <a href="https://promptflix.in" target="_blank" rel="noopener">promptflix.in</a></p>
+  <p style="margin-top:4px;">llm-kit is open source — AI tools for everyone</p>
+</footer>
+<script>
+var TERMS = [
+  // Core LLM
+  { term:'LLM', cat:'Core', color:'var(--purple)', def:'Large Language Model. An AI trained on huge amounts of text to predict the next word. ChatGPT, Claude, Gemini are all LLMs. "Large" refers to the number of parameters — billions of adjustable numbers.', see:'llm.html' },
+  { term:'Token', cat:'Core', color:'var(--purple)', def:'The basic unit of text an LLM processes. Not exactly a word — more like a word chunk. "Tokenization" splits text into tokens. "Hello world" = 2 tokens. "Antidisestablishmentarianism" = many tokens.', see:'tokens.html' },
+  { term:'Context Window', cat:'Core', color:'var(--purple)', def:'The maximum amount of text (in tokens) an AI can see at once. Like a whiteboard — if it gets full, old content falls off. GPT-4o: 128K tokens (~100K words). Claude 3.7: 200K tokens.', see:'context.html' },
+  { term:'Prompt', cat:'Core', color:'var(--purple)', def:'The input you give to an AI. Can be a question, instruction, examples, or a combination. "What is 2+2?" is a prompt. The art of writing good prompts is called prompt engineering.' },
+  { term:'Inference', cat:'Core', color:'var(--purple)', def:'Running a trained AI model to generate outputs. When you send a message to ChatGPT and it replies, that\'s inference. The opposite of training.', see:'inference.html' },
+  { term:'Training', cat:'Core', color:'var(--purple)', def:'Teaching an AI by feeding it data and adjusting its internal numbers (weights) to minimize mistakes. Training GPT-4 took months on thousands of GPUs. Inference is much cheaper.', see:'training.html' },
+  { term:'Parameters / Weights', cat:'Core', color:'var(--purple)', def:'The adjustable numbers inside a neural network. A "7B model" has 7 billion parameters. These numbers are adjusted during training. After training, they\'re frozen during inference.' },
+  { term:'Forward Pass', cat:'Core', color:'var(--purple)', def:'Processing input through the model from start to finish to get an output. Every token generation requires one forward pass. The opposite (backward pass / backpropagation) is used during training.' },
+  { term:'Autoregressive', cat:'Core', color:'var(--purple)', def:'Generating one token at a time, using all previous tokens as input. All current LLMs are autoregressive. This is why generation is sequential and can\'t be parallelized.' },
+
+  // Architecture
+  { term:'Transformer', cat:'Architecture', color:'var(--cyan)', def:'The neural network architecture used by all modern LLMs. Invented in 2017 ("Attention is All You Need" paper). Uses attention mechanisms to understand relationships between all words simultaneously.', see:'transformer.html' },
+  { term:'Attention', cat:'Architecture', color:'var(--cyan)', def:'The mechanism that lets each token look at all other tokens in context and decide which ones are most relevant. "Self-attention" is what makes transformers powerful. Q, K, V vectors.', see:'attention.html' },
+  { term:'Embedding', cat:'Architecture', color:'var(--cyan)', def:'Converting text (or images, audio, etc.) into a list of numbers (a vector) that captures meaning. Similar things have similar embeddings. "cat" and "kitten" have close embeddings.', see:'embeddings.html' },
+  { term:'Encoder', cat:'Architecture', color:'var(--cyan)', def:'Part of a transformer that reads and understands input text. BERT is encoder-only. Good for classification, search, and understanding tasks.' },
+  { term:'Decoder', cat:'Architecture', color:'var(--cyan)', def:'Part of a transformer that generates output text. GPT models are decoder-only. Good for text generation. Most modern LLMs are decoder-only.' },
+  { term:'Residual Connection', cat:'Architecture', color:'var(--cyan)', def:'A "skip connection" that adds the input of a layer to its output. Prevents gradients from vanishing during training. Critical for training very deep networks.' },
+  { term:'Layer Norm', cat:'Architecture', color:'var(--cyan)', def:'Normalization applied within each transformer layer to stabilize training. Keeps activations in a reasonable range. Makes deep networks much easier to train.' },
+  { term:'Feed-Forward Network (FFN)', cat:'Architecture', color:'var(--cyan)', def:'The part of each transformer block that processes each token independently (no attention). In MoE models, these are replaced by a mixture of expert FFNs.' },
+  { term:'Positional Encoding', cat:'Architecture', color:'var(--cyan)', def:'Since transformers process all tokens simultaneously, positional encodings tell the model where each token is in the sequence. Without them, "dog bites man" and "man bites dog" would look the same.' },
+
+  // Training
+  { term:'Gradient Descent', cat:'Training', color:'var(--amber)', def:'The algorithm used to update model weights during training. Calculates which direction to nudge each weight to reduce prediction errors. Repeated millions of times.' },
+  { term:'Backpropagation', cat:'Training', color:'var(--amber)', def:'The algorithm that calculates how much each weight contributed to the prediction error, enabling gradient descent. Works by applying the chain rule of calculus backward through the network.' },
+  { term:'Loss Function', cat:'Training', color:'var(--amber)', def:'A number that measures how wrong the model\'s predictions are. Training tries to minimize this number. For LLMs: cross-entropy loss — how surprised the model is by the next correct token.' },
+  { term:'Learning Rate', cat:'Training', color:'var(--amber)', def:'How big each weight update step is during training. Too high: unstable training. Too low: very slow learning. Usually starts high and decreases (learning rate scheduling).' },
+  { term:'Epoch', cat:'Training', color:'var(--amber)', def:'One full pass through the entire training dataset. Training typically runs for multiple epochs. Too many epochs → overfitting (memorizing instead of generalizing).' },
+  { term:'Batch Size', cat:'Training', color:'var(--amber)', def:'How many training examples are processed together before updating weights. Larger batches: more stable gradients but more memory. Small batches: noisier but sometimes better generalization.' },
+  { term:'Overfitting', cat:'Training', color:'var(--amber)', def:'When a model memorizes training data instead of learning general patterns. It performs well on training examples but poorly on new ones. Prevented by: more data, dropout, early stopping.' },
+  { term:'Pre-training', cat:'Training', color:'var(--amber)', def:'The initial massive training on huge text corpora (internet, books, code). This is where the model learns language, facts, and reasoning. The expensive part ($millions+).' },
+  { term:'Fine-tuning', cat:'Training', color:'var(--amber)', def:'Taking a pre-trained model and training it further on a specific, smaller dataset to specialize its behavior. Much cheaper than pre-training. GPT-3.5-turbo was fine-tuned from GPT-3.', see:'fine-tuning.html' },
+
+  // Alignment
+  { term:'RLHF', cat:'Alignment', color:'var(--pink)', def:'Reinforcement Learning from Human Feedback. Humans rate AI responses; a reward model learns from those ratings; the main model is trained to get high reward. How ChatGPT was made helpful and safe.', see:'rlhf.html' },
+  { term:'SFT', cat:'Alignment', color:'var(--pink)', def:'Supervised Fine-Tuning. The first step of RLHF — train the model on examples of ideal responses written by humans. Teaches the format and style of good answers.' },
+  { term:'PPO', cat:'Alignment', color:'var(--pink)', def:'Proximal Policy Optimization. The reinforcement learning algorithm used in RLHF to update the model based on reward signals while not changing too much at once (the "proximal" constraint).' },
+  { term:'Constitutional AI', cat:'Alignment', color:'var(--pink)', def:'Anthropic\'s technique where AI provides its own feedback based on a set of principles ("constitution"), reducing reliance on human raters. Used in Claude\'s training.' },
+  { term:'Alignment', cat:'Alignment', color:'var(--pink)', def:'Making AI systems do what humans intend and find valuable. Includes safety (avoiding harmful outputs) and helpfulness. An "aligned" AI follows instructions, is honest, and doesn\'t cause harm.' },
+
+  // Inference / Efficiency
+  { term:'KV Cache', cat:'Efficiency', color:'var(--green)', def:'Saved computation from previous tokens during inference. Instead of recomputing Q,K,V vectors for every past token each time, they\'re cached. Massively speeds up generation.', see:'kv-cache.html' },
+  { term:'Quantization', cat:'Efficiency', color:'var(--green)', def:'Reducing the precision of model weights (e.g., from 32-bit floats to 4-bit integers). Makes models smaller and faster. Small quality tradeoff, huge size savings.', see:'quantization.html' },
+  { term:'LoRA', cat:'Efficiency', color:'var(--green)', def:'Low-Rank Adaptation. Fine-tuning technique that trains only tiny adapter matrices (1% of params) instead of the full model. Makes fine-tuning cheap enough for consumer hardware.', see:'lora.html' },
+  { term:'QLoRA', cat:'Efficiency', color:'var(--green)', def:'Quantized LoRA. Combines 4-bit quantization of the base model with LoRA fine-tuning. Enables fine-tuning 65B+ models on a single consumer GPU.' },
+  { term:'TTFT', cat:'Efficiency', color:'var(--green)', def:'Time to First Token. How long from sending a prompt until the first word of response appears. Dominated by the prefill phase. Target: under 500ms for good UX.' },
+  { term:'TPS', cat:'Efficiency', color:'var(--green)', def:'Tokens Per Second. How fast the model generates tokens in the decode phase. GPT-4: ~60 TPS. Groq hardware: 800+ TPS. Faster = more pleasant to read.' },
+  { term:'Speculative Decoding', cat:'Efficiency', color:'var(--green)', def:'Speed trick: use a small "draft" model to generate multiple candidate tokens, then verify/reject them in one pass with the large model. Gives 2-4x speedup without quality loss.' },
+  { term:'Prefill', cat:'Efficiency', color:'var(--green)', def:'The phase where the AI reads and processes your entire prompt in one parallel batch. Fast. Creates the KV cache. Followed by the decode phase.', see:'inference.html' },
+  { term:'Decode', cat:'Efficiency', color:'var(--green)', def:'The phase where the AI generates response tokens one by one. Slow. Sequential. Each token is sampled from a probability distribution over the vocabulary.', see:'inference.html' },
+
+  // Prompting
+  { term:'Zero-Shot', cat:'Prompting', color:'var(--faint)', def:'Asking a model to do a task without any examples. Just the instruction. "Translate this to French: [text]". Good models handle most tasks zero-shot.', see:'few-shot.html' },
+  { term:'Few-Shot', cat:'Prompting', color:'var(--faint)', def:'Providing 2-5 examples before the actual query. Helps the model learn the desired format or behavior in-context without any weight updates.', see:'few-shot.html' },
+  { term:'Chain of Thought (CoT)', cat:'Prompting', color:'var(--faint)', def:'Prompting the model to "think step by step" before giving a final answer. Dramatically improves performance on math, logic, and multi-step reasoning tasks.', see:'cot.html' },
+  { term:'System Prompt', cat:'Prompting', color:'var(--faint)', def:'Hidden developer instructions sent before the user conversation starts. Defines the AI\'s role, constraints, and tone. Not visible to end users.', see:'system-prompt.html' },
+  { term:'Prompt Engineering', cat:'Prompting', color:'var(--faint)', def:'The practice of designing and refining prompts to get better AI outputs. Includes techniques like role prompting, few-shot examples, output format specification, etc.', see:'prompt.html' },
+  { term:'In-Context Learning', cat:'Prompting', color:'var(--faint)', def:'The ability of LLMs to adapt to new tasks using only examples in the prompt — no weight updates. Few-shot prompting is a form of in-context learning.' },
+  { term:'Temperature', cat:'Prompting', color:'var(--faint)', def:'A parameter controlling randomness of output. 0 = always pick the most likely token (deterministic). 1 = proportional sampling. 2 = very random/creative. Most apps use 0.7-1.0.', see:'temperature.html' },
+  { term:'Top-P (Nucleus Sampling)', cat:'Prompting', color:'var(--faint)', def:'An alternative to temperature. Only sample from the smallest set of tokens whose cumulative probability exceeds P. Top-P=0.9 means only the most probable 90% of possibilities are considered.' },
+  { term:'Grounding', cat:'Prompting', color:'var(--faint)', def:'Anchoring AI responses to specific, verifiable sources. "Answer based only on these documents." Reduces hallucination. RAG is the most common grounding technique.', see:'grounding.html' },
+
+  // RAG & Agents
+  { term:'RAG', cat:'RAG & Agents', color:'var(--cyan)', def:'Retrieval-Augmented Generation. Search a knowledge base for relevant documents, inject them into context, ask the AI to answer based on them. Reduces hallucination, adds real-time knowledge.', see:'rag.html' },
+  { term:'Vector Database', cat:'RAG & Agents', color:'var(--cyan)', def:'A database that stores text as number-vectors and finds similar items by measuring vector distance. Used in RAG to find relevant documents. Examples: Pinecone, Chroma, Weaviate.', see:'vector-db.html' },
+  { term:'Agent', cat:'RAG & Agents', color:'var(--cyan)', def:'An AI that can use tools (web search, code execution, APIs) and make multi-step decisions to complete a goal. Not just answering a question — actually taking actions.', see:'agents.html' },
+  { term:'ReAct', cat:'RAG & Agents', color:'var(--cyan)', def:'A prompting framework for agents: Reason → Act → Observe → Repeat. The AI thinks about what to do, does it, observes the result, and decides the next step.' },
+  { term:'Function Calling', cat:'RAG & Agents', color:'var(--cyan)', def:'AI feature where the model outputs a structured JSON call to a function instead of free-text. Your code runs the function and sends results back. How agents use tools.', see:'function-calling.html' },
+  { term:'MCP', cat:'RAG & Agents', color:'var(--cyan)', def:'Model Context Protocol. An open standard for connecting AI models to external tools (databases, APIs, filesystems). Like USB — write a tool once, any MCP-compatible AI can use it.', see:'mcp.html' },
+  { term:'Chunking', cat:'RAG & Agents', color:'var(--cyan)', def:'Splitting long documents into smaller pieces (chunks) for storage in a vector database. Typical size: 200-500 tokens per chunk with overlap. Chunk size affects retrieval quality.' },
+  { term:'Embedding Model', cat:'RAG & Agents', color:'var(--cyan)', def:'A neural network that converts text to embedding vectors. Used for semantic search and RAG. Examples: OpenAI text-embedding-3, Cohere Embed, sentence-transformers.' },
+
+  // Models & Scale
+  { term:'GPT', cat:'Models', color:'var(--green)', def:'Generative Pre-trained Transformer. OpenAI\'s series of models (GPT-1 through GPT-4o). The "G" in ChatGPT. Decoder-only transformer models pre-trained on internet text.' },
+  { term:'Claude', cat:'Models', color:'var(--green)', def:'Anthropic\'s AI assistant family. Versions: Haiku (fast/cheap), Sonnet (balanced), Opus (smartest). Trained with Constitutional AI and known for safety and long-context ability.' },
+  { term:'Gemini', cat:'Models', color:'var(--green)', def:'Google DeepMind\'s multimodal AI. Flash (fast), Pro (balanced), Ultra (powerful). Natively handles text, images, audio, video. Powers Google Search AI features.' },
+  { term:'Llama', cat:'Models', color:'var(--green)', def:'Meta\'s open-source LLM family. Weights are publicly released — you can download and run them. Llama 3.1 405B rivals GPT-4 class models. Powers much of the open-source AI ecosystem.' },
+  { term:'Mixtral', cat:'Models', color:'var(--green)', def:'Mistral AI\'s Mixture of Experts model. 8 expert networks, 2 active per token. Very efficient — comparable quality to GPT-3.5 at a fraction of the inference cost.' },
+  { term:'MoE', cat:'Models', color:'var(--green)', def:'Mixture of Experts. Architecture where different "expert" sub-networks specialize in different types of input. A router chooses which experts to activate per token. Enables large capacity at low cost.', see:'moe.html' },
+
+  // Safety & Issues
+  { term:'Hallucination', cat:'Safety', color:'var(--red)', def:'When an AI confidently states false information. The AI\'s pattern-completion mechanism can generate plausible-sounding text that is simply made up. Worse for rare/niche topics.', see:'hallucination.html' },
+  { term:'Jailbreak', cat:'Safety', color:'var(--red)', def:'Tricking an AI into ignoring its safety guidelines to produce harmful content. Usually involves role-playing prompts or unusual framing. AI companies work to patch these.' },
+  { term:'Alignment Tax', cat:'Safety', color:'var(--red)', def:'The performance cost of making a model safer. A maximally helpful model might also be more harmful. Safety training sometimes reduces capability. Researchers work to minimize this tradeoff.' },
+  { term:'NSFW Filter', cat:'Safety', color:'var(--red)', def:'Safety classifier that runs after generation to detect and block harmful content before it reaches users. Usually a separate model from the main LLM.' },
+  { term:'Prompt Injection', cat:'Safety', color:'var(--red)', def:'A security attack where malicious instructions are hidden in external content (e.g., a webpage the AI is asked to read) to override the original system prompt.' },
+  { term:'Model Collapse', cat:'Safety', color:'var(--red)', def:'When models trained on AI-generated data (instead of human data) degrade in quality. If the internet fills with AI text and the next model trains on it, output diversity decreases.' },
+
+  // Misc / Advanced
+  { term:'BERT', cat:'Architecture', color:'var(--cyan)', def:'Bidirectional Encoder Representations from Transformers. Encoder-only transformer by Google. Reads text in both directions. Great for classification and search. Not generative — can\'t produce free text.' },
+  { term:'Diffusion Model', cat:'Architecture', color:'var(--amber)', def:'Neural network that generates images (or audio/video) by learning to reverse a noise-adding process. Stable Diffusion, DALL-E, Midjourney are diffusion models.', see:'diffusion.html' },
+  { term:'Multimodal', cat:'Architecture', color:'var(--amber)', def:'AI that handles multiple input/output types: text, images, audio, video. GPT-4o, Gemini 1.5, Claude 3.7 are multimodal.', see:'multimodal.html' },
+  { term:'Benchmark', cat:'Evaluation', color:'var(--faint)', def:'A standardized test to evaluate AI capabilities. MMLU (general knowledge), HumanEval (coding), GSM8K (math). Higher scores = better at that task.', see:'benchmark.html' },
+  { term:'Perplexity', cat:'Evaluation', color:'var(--faint)', def:'A metric measuring how surprised a language model is by text. Lower perplexity = model finds the text more predictable = model fits the data better. Used to evaluate language model quality.' },
+  { term:'BLEU Score', cat:'Evaluation', color:'var(--faint)', def:'A metric for evaluating machine-translated text by comparing to human reference translations. Range 0-1. Limited — doesn\'t capture meaning well. Mostly replaced by human evaluation for LLMs.' },
+  { term:'Emergent Abilities', cat:'Scale', color:'var(--purple)', def:'Capabilities that appear suddenly in larger models but are absent in smaller ones. Like arithmetic: GPT-3 small could not do multi-digit addition; GPT-3 large suddenly could. Controversial in research.' },
+  { term:'Scaling Laws', cat:'Scale', color:'var(--purple)', def:'Empirical rules showing that model performance improves predictably with more data, more compute, and more parameters. Helped guide the decision to train ever-larger models.' },
+  { term:'Chinchilla Scaling', cat:'Scale', color:'var(--purple)', def:'DeepMind\'s 2022 finding that models were undertrained relative to their size. Optimal training: use ~20 tokens of data per parameter. Led to smaller but better-trained models.' },
+  { term:'Compute-Optimal', cat:'Scale', color:'var(--purple)', def:'Training a model with the optimal ratio of model size to training tokens for a given compute budget. Chinchilla showed previous models were too large and undertrained.' },
+  { term:'FLOP', cat:'Scale', color:'var(--purple)', def:'Floating Point Operation. The unit for measuring AI compute. A single forward pass of GPT-3 (175B params) takes ~350 billion FLOPs. Training took ~314 trillion FLOP-days.' },
+  { term:'Tokenizer', cat:'Core', color:'var(--purple)', def:'Converts raw text to tokens (numbers) that the model can process. BPE (Byte Pair Encoding) is most common. Each AI company trains their own tokenizer on their training data.', see:'tokens.html' },
+  { term:'BPE', cat:'Core', color:'var(--purple)', def:'Byte Pair Encoding. The most common tokenization algorithm. Starts with individual characters, then merges the most frequent pairs repeatedly. Results in a vocabulary of ~50K-100K tokens.' },
+  { term:'Vocabulary', cat:'Core', color:'var(--purple)', def:'The full set of tokens a model knows. GPT-4 has ~100K tokens. At each step, the model produces a probability over all vocabulary tokens for the next word.' },
+  { term:'Logits', cat:'Architecture', color:'var(--cyan)', def:'The raw unnormalized scores the model produces for each vocabulary token before softmax. Higher logit = model thinks this token is more likely next.' },
+  { term:'Softmax', cat:'Architecture', color:'var(--cyan)', def:'A function that converts raw logit scores into probabilities that sum to 1. Applied to the final layer of the LLM to get a probability distribution for the next token.' },
+  { term:'Semantic Search', cat:'RAG & Agents', color:'var(--cyan)', def:'Search by meaning rather than exact word match. Uses embedding vectors to find documents with similar meaning to a query. Core technology behind RAG and vector databases.' },
+  { term:'Top-K Sampling', cat:'Prompting', color:'var(--faint)', def:'Only sample from the K most probable next tokens. Top-K=40 means only the 40 most likely tokens are considered. Prevents sampling very unlikely tokens.' },
+  { term:'Repetition Penalty', cat:'Prompting', color:'var(--faint)', def:'A parameter that reduces probability of tokens the model has already generated. Prevents annoying repetition loops in AI text.' },
+  { term:'Stop Sequence', cat:'Prompting', color:'var(--faint)', def:'Strings that tell the model to stop generating when encountered. E.g., stop=["\n\n"] stops after a blank line. Used to control output length and format.' },
+  { term:'Seed', cat:'Prompting', color:'var(--faint)', def:'A number that makes generation deterministic. Same seed + same prompt = same output (assuming temperature > 0 otherwise). Useful for reproducibility.' },
+  { term:'Multihead Attention', cat:'Architecture', color:'var(--cyan)', def:'Running multiple attention operations in parallel ("heads") and concatenating results. Each head can attend to different aspects (syntax, semantics, coreference). GPT-3 uses 96 attention heads.' },
+  { term:'GQA', cat:'Architecture', color:'var(--cyan)', def:'Grouped Query Attention. Memory efficiency trick where multiple query heads share one key-value head. Reduces KV cache size. Used in Llama 3, Mistral, and most modern efficient LLMs.' },
+  { term:'RoPE', cat:'Architecture', color:'var(--cyan)', def:'Rotary Position Embedding. A way to encode token positions by rotating query and key vectors. Better for long contexts than absolute positional encodings. Used in Llama, Mistral.' },
+  { term:'Flash Attention', cat:'Efficiency', color:'var(--green)', def:'A GPU memory-efficient implementation of attention. Reorganizes computation to minimize expensive memory reads/writes. Enables longer contexts and faster training. Used in almost all modern LLMs.' },
+];
+
+var CATEGORIES = ['All', ...new Set(TERMS.map(function(t){ return t.cat; }))];
+var activeCategory = 'All';
+
+function buildFilters() {
+  var html = '';
+  CATEGORIES.forEach(function(c) {
+    html += '<button class="filter-btn'+(c==='All'?' active':'')+'" onclick="setCat(\''+c+'\',this)">'+c+'</button>';
+  });
+  document.getElementById('cat-filters').innerHTML = html;
+}
+
+function setCat(cat, btn) {
+  activeCategory = cat;
+  document.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
+  btn.classList.add('active');
+  filterGlossary();
+}
+
+function filterGlossary() {
+  var q = document.getElementById('glos-search').value.toLowerCase();
+  var filtered = TERMS.filter(function(t) {
+    var catMatch = activeCategory === 'All' || t.cat === activeCategory;
+    var textMatch = !q || t.term.toLowerCase().includes(q) || t.def.toLowerCase().includes(q);
+    return catMatch && textMatch;
+  }).sort(function(a,b) { return a.term.localeCompare(b.term); });
+
+  document.getElementById('glos-count').textContent = filtered.length + ' term' + (filtered.length !== 1 ? 's' : '');
+
+  var html = '';
+  filtered.forEach(function(t) {
+    html += '<div class="glos-term">';
+    html += '<div><div class="glos-word" style="color:'+t.color+';">'+(t.see?'<a href="'+t.see+'" style="color:'+t.color+';text-decoration:none;">'+t.term+' ↗</a>':t.term)+'</div>';
+    html += '<span class="glos-cat" style="color:'+t.color+';border-color:'+t.color+'40;background:'+t.color+'15;">'+t.cat+'</span></div>';
+    html += '<div class="glos-def">'+t.def+'</div>';
+    html += '</div>';
+  });
+  document.getElementById('glos-list').innerHTML = html || '<div style="font-family:var(--mono);font-size:12px;color:var(--faint);padding:20px 0;">No terms found for "'+q+'"</div>';
+}
+
+buildFilters();
+filterGlossary();
+</script>
+<script>(function(){var c=document.getElementById('ai-canvas'),x=c.getContext('2d'),w,h,cols,drops;function r(){w=c.width=window.innerWidth;h=c.height=window.innerHeight;cols=Math.floor(w/16);drops=new Array(cols).fill(0).map(function(){return Math.floor(Math.random()*-60);});}r();window.addEventListener('resize',r);var f=0;function d(){f++;requestAnimationFrame(d);if(f%5!==0)return;x.fillStyle='rgba(6,1,15,0.1)';x.fillRect(0,0,w,h);x.font='12px JetBrains Mono,monospace';for(var i=0;i<cols;i++){x.fillStyle=Math.random()>.96?'rgba(167,139,250,0.18)':'rgba(167,139,250,0.04)';x.fillText(CHARS[Math.floor(Math.random()*CHARS.length)],i*16,drops[i]*16);if(drops[i]*16>h&&Math.random()>.975)drops[i]=0;else drops[i]++;}}var CHARS='ABCDEFabcdef';requestAnimationFrame(d);})();</script>
+<script src="../js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KV Cache — llm-kit</title>
+  <link rel="stylesheet" href="../css/main.css" />
+  <style>
+    .token-row { display:flex; gap:6px; flex-wrap:wrap; margin:8px 0; }
+    .tok { padding:5px 10px; border-radius:var(--r-md); font-family:var(--mono); font-size:12px; font-weight:600; border:1px solid; transition:all .3s; }
+    .tok.cached  { background:rgba(74,222,128,.12); border-color:rgba(74,222,128,.35); color:var(--green); }
+    .tok.new     { background:rgba(251,191,36,.12);  border-color:rgba(251,191,36,.35);  color:var(--amber); }
+    .tok.dimmed  { background:rgba(255,255,255,.03); border-color:rgba(255,255,255,.08); color:var(--faint); }
+
+    .cost-bar { display:flex; gap:10px; align-items:center; font-family:var(--mono); font-size:12px; margin:6px 0; }
+    .cost-track { flex:1; height:18px; background:var(--bg3); border-radius:var(--r-sm); overflow:hidden; }
+    .cost-fill   { height:100%; border-radius:var(--r-sm); display:flex; align-items:center; padding-left:8px; font-size:10px; font-weight:700; transition:width .6s var(--ease); }
+    .cost-label  { min-width:110px; color:var(--muted); }
+    .cost-value  { min-width:60px; text-align:right; }
+  </style>
+</head>
+<body>
+<canvas id="ai-canvas" style="opacity:.15;"></canvas>
+<div class="grid-bg"></div>
+<div class="blob blob-2" style="opacity:.25;"></div>
+<nav class="nav scrolled">
+  <a class="nav-brand" href="../index.html"><span class="nav-brand-name">llm-kit</span><span class="nav-brand-by">@echobash</span></a>
+  <ul class="nav-links">
+    <li><a href="../index.html">home</a></li>
+    <li><a href="context.html">context</a></li>
+    <li><a href="inference.html">inference</a></li>
+    <li><a href="kv-cache.html" class="active">kv cache</a></li>
+  </ul>
+</nav>
+<div class="tool-wrap">
+  <div class="tool-title">kv_cache</div>
+  <div class="tool-sub">// The optimization that makes AI responses fast (and cheap)</div>
+
+  <div style="background:rgba(74,222,128,.06);border:1px solid rgba(74,222,128,.2);border-radius:var(--r-lg);padding:14px 18px;margin-bottom:24px;font-family:var(--mono);font-size:13px;color:var(--muted);line-height:1.7;">
+    💡 <strong style="color:var(--green);">The core idea:</strong> Every time the AI processes text, it does heavy math on every word. Without a cache, if you send 1000 words + 1 new word, it redoes math on all 1001 words. With KV cache, it saves the math results for the first 1000 words. Next turn: only compute 1 new word. Like caching a webpage instead of rebuilding it from scratch every request.
+  </div>
+
+  <div class="mode-tabs">
+    <button class="mode-tab active" id="tab-demo"   onclick="setMode('demo')">Cache Demo</button>
+    <button class="mode-tab" id="tab-why"    onclick="setMode('why')">Why It Matters</button>
+    <button class="mode-tab" id="tab-prefix" onclick="setMode('prefix')">Prefix Caching</button>
+  </div>
+
+  <div class="stage">
+    <div class="stage-bar">
+      <div class="stage-bar-left"><span class="wp wp-r"></span><span class="wp wp-y"></span><span class="wp wp-g"></span></div>
+      <span class="stage-progress" id="stage-progress">KV Cache in action</span>
+    </div>
+    <div class="stage-body" id="stage-body">
+
+      <div id="mode-demo">
+        <div style="font-family:var(--mono);font-size:12px;color:var(--faint);margin-bottom:12px;">Scenario: A 10-message conversation. Each turn adds new tokens. Watch what gets recomputed vs cached.</div>
+
+        <div id="demo-turns"></div>
+
+        <div class="ctrl-row">
+          <button class="step-btn" onclick="addTurn()">+ next message</button>
+          <button class="reset-btn" onclick="resetDemo()">↺ reset</button>
+          <span style="font-family:var(--mono);font-size:12px;color:var(--faint);" id="demo-turn-label">Turn 0</span>
+        </div>
+
+        <div style="margin-top:16px;font-family:var(--mono);">
+          <div style="font-size:12px;color:var(--faint);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px;">COMPUTE COST PER TURN</div>
+          <div id="cost-bars"></div>
+        </div>
+
+        <div style="margin-top:12px;display:flex;gap:16px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;">
+          <span><span style="display:inline-block;width:10px;height:10px;background:rgba(74,222,128,.4);border-radius:2px;margin-right:4px;vertical-align:middle;border:1px solid rgba(74,222,128,.5);"></span>Cached (free)</span>
+          <span><span style="display:inline-block;width:10px;height:10px;background:rgba(251,191,36,.4);border-radius:2px;margin-right:4px;vertical-align:middle;border:1px solid rgba(251,191,36,.5);"></span>New (computed)</span>
+        </div>
+      </div>
+
+      <div id="mode-why" style="display:none;">
+        <div id="why-content"></div>
+      </div>
+
+      <div id="mode-prefix" style="display:none;">
+        <div id="prefix-content"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="explain-panel">
+    <div class="explain-step" id="exp-step">K, V — what do these letters mean?</div>
+    <div class="explain-text" id="exp-text">In the transformer's attention mechanism, every token creates three vectors: Q (query), K (key), V (value). To process a new token, the model needs the K and V vectors of every previous token. The KV cache stores these so they don't have to be recomputed. K = "what do I contain?", V = "what info do I carry?"</div>
+    <div class="explain-tags" id="exp-tags"><span class="tag tag-g">10x FASTER GENERATION</span><span class="tag tag-c">REDUCES COST DRAMATICALLY</span></div>
+  </div>
+</div><!-- ── Also by echobash strip ── -->
+<div class="also-strip">
+  <div class="also-inner">
+    <span class="also-label">also by echobash</span>
+    <div class="also-divider"></div>
+    <div class="also-links">
+      <a href="https://devdunia.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--cyan);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">devdunia</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">networking tools</span>
+      </a>
+      <a href="https://echobash.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--purple);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">echobash</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">portfolio</span>
+      </a>
+      <a href="https://promptflix.in" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--amber);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">promptflix</span><span class="also-link-tld">.in</span>
+        <span class="also-link-sub">prompt library</span>
+      </a>
+    </div>
+  </div>
+</div>
+<footer class="footer">
+  <p>built by echobash &nbsp;·&nbsp; <a href="https://devdunia.com" target="_blank" rel="noopener">devdunia.com</a> &nbsp;·&nbsp; <a href="https://echobash.com" target="_blank" rel="noopener">echobash.com</a> &nbsp;·&nbsp; <a href="https://promptflix.in" target="_blank" rel="noopener">promptflix.in</a></p>
+  <p style="margin-top:4px;">llm-kit is open source — AI tools for everyone</p>
+</footer>
+<script>
+var TURNS_DATA = [
+  { label:'Turn 1 — System prompt', tokens:150, msg:'System: You are a helpful assistant...' },
+  { label:'Turn 2 — User asks', tokens:30, msg:'User: "What is machine learning?"' },
+  { label:'Turn 3 — AI answers', tokens:120, msg:'AI: Machine learning is a type of AI that...' },
+  { label:'Turn 4 — Follow-up', tokens:20, msg:'User: "Can you give an example?"' },
+  { label:'Turn 5 — AI example', tokens:100, msg:'AI: Sure! A spam filter learns from examples...' },
+  { label:'Turn 6 — Another question', tokens:18, msg:'User: "How is it trained?"' },
+  { label:'Turn 7 — Explanation', tokens:140, msg:'AI: Training involves feeding labeled data...' },
+];
+
+var currentTurn = 0;
+var turnCosts = [];
+
+function resetDemo() {
+  currentTurn = 0;
+  turnCosts = [];
+  document.getElementById('demo-turns').innerHTML = '';
+  document.getElementById('cost-bars').innerHTML = '';
+  document.getElementById('demo-turn-label').textContent = 'Turn 0';
+}
+
+function addTurn() {
+  if (currentTurn >= TURNS_DATA.length) return;
+  var t = TURNS_DATA[currentTurn];
+  var cachedTotal = turnCosts.reduce(function(a,b){return a+b;}, 0);
+  var newTokens = t.tokens;
+  var savedPct = currentTurn > 0 ? Math.round(cachedTotal / (cachedTotal + newTokens) * 100) : 0;
+
+  // token display
+  var div = document.createElement('div');
+  div.style.marginBottom = '12px';
+  div.style.opacity = '0';
+  div.style.transition = 'opacity .3s';
+  var cachedHtml = '';
+  for (var i=0; i<Math.min(cachedTotal, 30); i++) {
+    cachedHtml += '<span class="tok cached">▪</span>';
+  }
+  if (cachedTotal > 30) cachedHtml += '<span class="tok dimmed">+' + (cachedTotal-30) + ' more</span>';
+  var newHtml = '';
+  for (var j=0; j<Math.min(newTokens, 10); j++) {
+    newHtml += '<span class="tok new">▪</span>';
+  }
+  if (newTokens > 10) newHtml += '<span class="tok new">+' + (newTokens-10) + ' more</span>';
+
+  div.innerHTML = '<div style="font-family:var(--mono);font-size:11px;color:var(--faint);margin-bottom:4px;">'+t.label+'</div>' +
+    '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:6px;">'+t.msg+'</div>' +
+    '<div class="token-row">' + (cachedHtml || '') + newHtml + '</div>' +
+    (savedPct > 0 ? '<div style="font-family:var(--mono);font-size:10px;color:var(--green);">✓ ' + savedPct + '% of tokens served from cache</div>' : '<div style="font-family:var(--mono);font-size:10px;color:var(--amber);">⚡ First turn — computing all tokens</div>');
+  document.getElementById('demo-turns').appendChild(div);
+  requestAnimationFrame(function() { div.style.opacity = '1'; });
+
+  // cost bar
+  var bar = document.createElement('div');
+  bar.className = 'cost-bar';
+  bar.innerHTML = '<div class="cost-label">'+t.label.split('—')[0].trim()+'</div>' +
+    '<div class="cost-track"><div class="cost-fill" style="width:' + Math.max(2, Math.round(newTokens/200*100)) + '%;background:rgba(251,191,36,.6);">' + newTokens + ' new</div></div>' +
+    '<div class="cost-value" style="color:var(--amber);">' + newTokens + ' tok</div>';
+  document.getElementById('cost-bars').appendChild(bar);
+
+  turnCosts.push(newTokens);
+  currentTurn++;
+  document.getElementById('demo-turn-label').textContent = 'Turn ' + currentTurn + ' / ' + TURNS_DATA.length;
+}
+
+var WHY_ITEMS = [
+  { color:'var(--green)', title:'Speed: Time-to-first-token', desc:'Without cache: every token in your conversation history needs fresh computation before the AI can even start generating. With cache: only the new tokens are computed. For long conversations, this means the AI starts responding in milliseconds instead of seconds.' },
+  { color:'var(--cyan)',   title:'Cost reduction', desc:'Cloud AI providers charge by tokens processed. With KV cache, you\'re only charged for "cache miss" tokens — new tokens that aren\'t in the cache yet. Anthropic, OpenAI, and Google all offer cache pricing discounts (up to 90% cheaper for repeated system prompts).' },
+  { color:'var(--amber)',  title:'Memory trade-off', desc:'The KV cache takes up GPU memory. For a long conversation, the cache can be several GB. This is why context windows have limits — the model would run out of GPU memory to store the cache for longer contexts.' },
+  { color:'var(--purple)', title:'Cache eviction', desc:'When the context window fills up, old tokens get evicted from the cache. The AI "forgets" the oldest parts of the conversation because there\'s no more room to store their KV vectors.' },
+];
+
+function buildWhy() {
+  var html = '';
+  WHY_ITEMS.forEach(function(w) {
+    html += '<div style="display:flex;gap:12px;margin-bottom:12px;"><div style="flex:0 0 10px;margin-top:6px;width:10px;height:10px;border-radius:50%;background:'+w.color+';flex-shrink:0;"></div><div><div style="font-family:var(--mono);font-size:13px;font-weight:700;color:'+w.color+';margin-bottom:4px;">'+w.title+'</div><div style="font-family:var(--mono);font-size:12px;color:var(--muted);line-height:1.6;">'+w.desc+'</div></div></div>';
+  });
+  document.getElementById('why-content').innerHTML = html;
+}
+
+function buildPrefix() {
+  var html = '<div style="font-family:var(--mono);font-size:13px;color:var(--muted);line-height:1.7;margin-bottom:16px;">Prefix caching (also called "prompt caching") means: if thousands of API requests all start with the same system prompt, that prefix only gets computed once and the result is cached for everyone who reuses that prefix.</div>';
+  html += '<div style="background:rgba(0,0,0,.3);border:1px solid rgba(74,222,128,.2);border-radius:var(--r-lg);padding:14px;font-family:var(--mono);font-size:12px;margin-bottom:12px;">';
+  html += '<div style="color:var(--green);font-weight:700;margin-bottom:8px;">Example: Shared system prompt</div>';
+  html += '<div style="color:var(--faint);margin-bottom:6px;">System prompt (10,000 tokens) → computed once, cached</div>';
+  html += '<div class="token-row" style="margin-bottom:8px;">';
+  for (var i=0;i<20;i++) html += '<span class="tok cached">▪</span>';
+  html += '<span style="font-family:var(--mono);font-size:11px;color:var(--green);margin-left:4px;">10k cached tokens ✓</span>';
+  html += '</div>';
+  html += '<div style="color:var(--faint);margin-bottom:6px;">User 1\'s question (20 tokens) → computed fresh</div>';
+  html += '<div class="token-row" style="margin-bottom:8px;">';
+  for (var j=0;j<5;j++) html += '<span class="tok new">▪</span>';
+  html += '<span style="font-family:var(--mono);font-size:11px;color:var(--amber);margin-left:4px;">20 new tokens</span>';
+  html += '</div>';
+  html += '<div style="color:var(--green);font-size:11px;">User 2, 3, 4... all pay for only ~20 tokens. System prompt = free from cache.</div>';
+  html += '</div>';
+  html += '<div style="font-family:var(--mono);font-size:13px;color:var(--muted);line-height:1.7;">Claude\'s prompt cache gives a <strong style="color:var(--green);">90% cost reduction</strong> on repeated prefixes and a <strong style="color:var(--green);">~5x latency reduction</strong>. OpenAI charges 50% less for cached input tokens. Very powerful for production apps with large system prompts (RAG documents, long instructions, etc.).</div>';
+  document.getElementById('prefix-content').innerHTML = html;
+}
+
+function setMode(m) {
+  ['demo','why','prefix'].forEach(function(x) {
+    document.getElementById('mode-'+x).style.display = x===m?'':'none';
+    document.getElementById('tab-'+x).classList.toggle('active', x===m);
+  });
+  if (m==='why') buildWhy();
+  if (m==='prefix') buildPrefix();
+  document.getElementById('stage-progress').textContent = m==='demo'?'KV Cache in action':m==='why'?'Why KV cache matters':'Prefix caching deep dive';
+}
+</script>
+<script>(function(){var c=document.getElementById('ai-canvas'),x=c.getContext('2d'),w,h,cols,drops;function r(){w=c.width=window.innerWidth;h=c.height=window.innerHeight;cols=Math.floor(w/16);drops=new Array(cols).fill(0).map(function(){return Math.floor(Math.random()*-60);});}r();window.addEventListener('resize',r);var f=0;function d(){f++;requestAnimationFrame(d);if(f%5!==0)return;x.fillStyle='rgba(6,1,15,0.1)';x.fillRect(0,0,w,h);x.font='12px JetBrains Mono,monospace';for(var i=0;i<cols;i++){x.fillStyle=Math.random()>.96?'rgba(74,222,128,0.18)':'rgba(74,222,128,0.04)';x.fillText(Math.random()>.5?'K':'V',i*16,drops[i]*16);if(drops[i]*16>h&&Math.random()>.975)drops[i]=0;else drops[i]++;}}requestAnimationFrame(d);})();</script>
+<script src="../js/main.js"></script>
+</body>
+</html>

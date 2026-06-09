@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>How LLMs Work — llm-kit</title>
+  <link rel="stylesheet" href="../css/main.css" />
+  <style>
+    .pipeline { display:flex; flex-direction:column; gap:16px; }
+    .pipe-row {
+      display:flex; align-items:center; gap:0;
+      opacity:0; transform:translateY(12px);
+      transition:opacity .4s, transform .4s;
+    }
+    .pipe-row.show { opacity:1; transform:none; }
+    .pipe-box {
+      background:var(--bg2); border:1px solid var(--border2);
+      border-radius:var(--r-lg); padding:14px 18px;
+      font-family:var(--mono); font-size:13px; min-width:160px;
+      text-align:center;
+    }
+    .pipe-box.active { border-color:rgba(167,139,250,.4); background:rgba(167,139,250,.06); }
+    .pipe-box-label { font-size:10px; text-transform:uppercase; letter-spacing:.1em; color:var(--faint); margin-bottom:4px; }
+    .pipe-box-val { font-weight:700; }
+    .pipe-arrow {
+      flex:1; display:flex; align-items:center; justify-content:center;
+      font-family:var(--mono); font-size:20px; color:var(--faint); padding:0 8px;
+    }
+    .pipe-desc {
+      flex:1; font-family:var(--mono); font-size:12px; color:var(--muted);
+      padding:0 16px; line-height:1.6; min-width:200px;
+    }
+
+    .prob-bars { margin-top:12px; display:flex; flex-direction:column; gap:6px; }
+    .prob-row { display:flex; align-items:center; gap:8px; font-family:var(--mono); font-size:12px; }
+    .prob-token { width:80px; color:var(--muted); text-align:right; }
+    .prob-bar-wrap { flex:1; background:var(--bg3); border-radius:99px; height:8px; overflow:hidden; }
+    .prob-fill { height:100%; border-radius:99px; transition:width .8s var(--ease); }
+    .prob-pct { width:44px; text-align:right; color:var(--purple); font-size:11px; }
+
+    .gen-output {
+      margin-top:16px; background:var(--bg2); border:1px solid var(--border2);
+      border-radius:var(--r-lg); padding:16px; font-family:var(--mono); font-size:14px;
+      color:var(--text); line-height:1.8; min-height:60px;
+    }
+    .tok-chip {
+      display:inline-block; padding:1px 6px; border-radius:3px; margin:2px;
+      font-size:13px; transition:all .3s;
+    }
+    .tok-new {
+      animation:tok-pop .4s var(--ease) both;
+    }
+    @keyframes tok-pop {
+      from { opacity:0; transform:scale(.7) translateY(6px); }
+      to   { opacity:1; transform:none; }
+    }
+    .gen-cursor {
+      display:inline-block; width:8px; height:16px; background:var(--purple);
+      border-radius:1px; animation:blink 1s step-end infinite; vertical-align:middle;
+    }
+    @keyframes blink { 0%,100%{opacity:.8} 50%{opacity:0} }
+  </style>
+</head>
+<body>
+<canvas id="ai-canvas" style="opacity:.2;"></canvas>
+<div class="grid-bg"></div>
+<div class="blob blob-1" style="opacity:.3;"></div>
+
+<nav class="nav scrolled">
+  <a class="nav-brand" href="../index.html"><span class="nav-brand-name">llm-kit</span><span class="nav-brand-by">@echobash</span></a>
+  <ul class="nav-links">
+    <li><a href="../index.html">home</a></li>
+    <li><a href="transformer.html">transformer</a></li>
+    <li><a href="tokens.html">tokens</a></li>
+    <li><a href="rag.html">rag</a></li>
+    <li><a href="llm.html" class="active">llm</a></li>
+  </ul>
+</nav>
+
+<div class="tool-wrap">
+  <div class="tool-title">how_llm_works</div>
+  <div class="tool-sub">// How an AI language model goes from your message to a response</div>
+
+  <div style="background:rgba(167,139,250,.06);border:1px solid rgba(167,139,250,.2);border-radius:var(--r-lg);padding:14px 18px;margin-bottom:24px;font-family:var(--mono);font-size:13px;color:var(--muted);line-height:1.7;">
+    💡 <strong style="color:var(--purple);">The core idea:</strong> ChatGPT, Claude, and Gemini all work the same way — they predict the next word, over and over. You type "The sky is", the AI predicts "blue". Then predicts "and" after that. Then "the". One word at a time, billions of calculations each time. That's it. Click "step" to see exactly how.
+  </div>
+
+  <div class="mode-tabs">
+    <button class="mode-tab active" id="tab-fwd" onclick="setMode('forward')">Forward Pass</button>
+    <button class="mode-tab" id="tab-gen" onclick="setMode('generate')">Token Generation</button>
+  </div>
+
+  <div class="ctrl-row">
+    <button class="step-btn" id="btn-step" onclick="step()">step →</button>
+    <button class="play-btn" onclick="playAll()">▶ play all</button>
+    <button class="reset-btn" onclick="reset()">↺ reset</button>
+    <span style="font-family:var(--mono);font-size:12px;color:var(--faint);margin-left:4px;" id="step-counter">Step 0 / 0</span>
+  </div>
+
+  <div class="stage">
+    <div class="stage-bar">
+      <div class="stage-bar-left"><span class="wp wp-r"></span><span class="wp wp-y"></span><span class="wp wp-g"></span></div>
+      <span class="stage-progress" id="stage-progress">Ready — click "step" to begin</span>
+    </div>
+    <div class="stage-body">
+      <div class="pipeline" id="pipeline"></div>
+      <div id="gen-area" style="display:none;">
+        <div style="font-family:var(--mono);font-size:12px;color:var(--faint);margin-bottom:8px;">PROMPT</div>
+        <div style="font-family:var(--mono);font-size:13px;color:var(--muted);margin-bottom:16px;padding:10px 14px;background:var(--bg3);border-radius:var(--r-md);border:1px solid var(--border);">The capital of France is</div>
+        <div style="font-family:var(--mono);font-size:12px;color:var(--faint);margin-bottom:8px;">PROBABILITY DISTRIBUTION (next token)</div>
+        <div class="prob-bars" id="prob-bars"></div>
+        <div style="font-family:var(--mono);font-size:12px;color:var(--faint);margin-top:16px;margin-bottom:8px;">GENERATED OUTPUT</div>
+        <div class="gen-output" id="gen-output"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="explain-panel">
+    <div class="explain-step" id="exp-step">What is an LLM?</div>
+    <div class="explain-text" id="exp-text">A Large Language Model (LLM) is a neural network trained to predict the next token given previous tokens. It learns patterns from massive text corpora and can generate coherent, contextually relevant text. Click "step" to walk through the forward pass.</div>
+    <div class="explain-tags" id="exp-tags"></div>
+  </div>
+</div><!-- ── Also by echobash strip ── -->
+<div class="also-strip">
+  <div class="also-inner">
+    <span class="also-label">also by echobash</span>
+    <div class="also-divider"></div>
+    <div class="also-links">
+      <a href="https://devdunia.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--cyan);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">devdunia</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">networking tools</span>
+      </a>
+      <a href="https://echobash.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--purple);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">echobash</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">portfolio</span>
+      </a>
+      <a href="https://promptflix.in" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--amber);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">promptflix</span><span class="also-link-tld">.in</span>
+        <span class="also-link-sub">prompt library</span>
+      </a>
+    </div>
+  </div>
+</div>
+<footer class="footer">
+  <p>built by echobash &nbsp;·&nbsp; <a href="https://devdunia.com" target="_blank" rel="noopener">devdunia.com</a> &nbsp;·&nbsp; <a href="https://echobash.com" target="_blank" rel="noopener">echobash.com</a> &nbsp;·&nbsp; <a href="https://promptflix.in" target="_blank" rel="noopener">promptflix.in</a></p>
+  <p style="margin-top:4px;">llm-kit is open source — AI tools for everyone</p>
+</footer>
+
+<script>
+var mode = 'forward', currentStep = 0;
+
+var FORWARD_STEPS = [
+  {
+    label:'Input Text',
+    val:'"The cat sat"',
+    color:'var(--purple)',
+    desc:'Your message — the starting point.',
+    step:'Step 1 — You type something',
+    text:'You type a message like "The cat sat". The AI can\'t read words directly — computers only understand numbers. So the first thing that must happen is converting your text into numbers the computer can work with.',
+    tags:['YOUR INPUT','TEXT']
+  },
+  {
+    label:'Tokenization',
+    val:'[464, 3797, 3332]',
+    color:'var(--cyan)',
+    desc:'Words split into pieces, each gets a number (ID).',
+    step:'Step 2 — Break text into tokens (numbers)',
+    text:'"The cat sat" becomes [464, 3797, 3332]. Think of it like converting letters to morse code — the AI\'s vocabulary has ~100,000 pieces, and each piece gets a unique number. Common words are one number; rare words split into multiple pieces.',
+    tags:['TOKENIZER','EACH WORD → A NUMBER']
+  },
+  {
+    label:'Token Embedding',
+    val:'[0.23, -0.71, …] ×3',
+    color:'var(--green)',
+    desc:'Each number → a list of 4,096 coordinates.',
+    step:'Step 3 — Convert numbers to "meaning coordinates"',
+    text:'Each token number is converted into a list of ~4,096 numbers called an embedding. Think of it like GPS coordinates — but instead of 2 numbers for location, it\'s thousands of numbers encoding meaning. Words with similar meanings end up with similar coordinates.',
+    tags:['EMBEDDINGS','MEANING IN NUMBERS']
+  },
+  {
+    label:'Transformer Layers',
+    val:'×32 layers',
+    color:'var(--amber)',
+    desc:'The AI "thinks" — each layer refines understanding.',
+    step:'Step 4 — The AI thinks (32 times)',
+    text:'The coordinates pass through 32 "thinking layers". In each layer, the AI asks: "Which words should I pay attention to? How do they relate?" By the end, each word\'s coordinates have been updated to reflect its meaning in this specific context.',
+    tags:['ATTENTION','THINKING LAYERS','CONTEXT']
+  },
+  {
+    label:'Final Understanding',
+    val:'rich meaning vector',
+    color:'var(--pink)',
+    desc:'What the AI "knows" about what should come next.',
+    step:'Step 5 — What does the AI understand so far?',
+    text:'After all 32 layers, we have a rich understanding of the text. The last word\'s coordinates now encode everything needed to predict what comes next — not just the word itself, but the full context of the conversation.',
+    tags:['CONTEXT VECTOR','DEEP UNDERSTANDING']
+  },
+  {
+    label:'Score Every Word',
+    val:'100,000 scores',
+    color:'var(--cyan)',
+    desc:'Rate how likely each possible next word is.',
+    step:'Step 6 — Score all possible next words',
+    text:'The AI\'s understanding is compared against all ~100,000 words in its vocabulary. Each word gets a score — how likely is it to come next? "mat" might score very high. "banana" very low. "floor" medium.',
+    tags:['LOGITS','SCORING ALL POSSIBILITIES']
+  },
+  {
+    label:'Pick Next Word',
+    val:'"sat" → "mat"',
+    color:'var(--green)',
+    desc:'Highest-scored word (or random sample) is chosen.',
+    step:'Step 7 — Pick the next word and repeat',
+    text:'Scores are converted to percentages (probabilities). The AI picks the most likely word — or randomly samples based on a "temperature" setting. That word is added to the text, and the entire process runs again for the next word. This repeats until the response is done.',
+    tags:['SAMPLING','TEMPERATURE','AUTOREGRESSIVE']
+  }
+];
+
+var GEN_TOKENS = [
+  { word:' Paris',  probs:[{tok:' Paris',p:0.74,col:'rgba(167,139,250,.6)'},{tok:' Lyon',p:0.09,col:'rgba(56,189,248,.4)'},{tok:' the',p:0.06,col:'rgba(74,222,128,.4)'},{tok:' a',p:0.04,col:'rgba(251,191,36,.4)'},{tok:' beautiful',p:0.03,col:'rgba(244,114,182,.3)'}] },
+  { word:'.',       probs:[{tok:'.',p:0.81,col:'rgba(167,139,250,.6)'},{tok:',',p:0.07,col:'rgba(56,189,248,.4)'},{tok:' —',p:0.04,col:'rgba(74,222,128,.4)'},{tok:' and',p:0.03,col:'rgba(251,191,36,.4)'},{tok:'!',p:0.02,col:'rgba(244,114,182,.3)'}] },
+  { word:' It',     probs:[{tok:' It',p:0.52,col:'rgba(167,139,250,.6)'},{tok:' The',p:0.18,col:'rgba(56,189,248,.4)'},{tok:' Paris',p:0.10,col:'rgba(74,222,128,.4)'},{tok:' Known',p:0.06,col:'rgba(251,191,36,.4)'},{tok:' A',p:0.04,col:'rgba(244,114,182,.3)'}] },
+  { word:' is',     probs:[{tok:' is',p:0.68,col:'rgba(167,139,250,.6)'},{tok:' has',p:0.12,col:'rgba(56,189,248,.4)'},{tok:' serves',p:0.07,col:'rgba(74,222,128,.4)'},{tok:' was',p:0.05,col:'rgba(251,191,36,.4)'},{tok:' remains',p:0.03,col:'rgba(244,114,182,.3)'}] },
+  { word:' known',  probs:[{tok:' known',p:0.44,col:'rgba(167,139,250,.6)'},{tok:' famous',p:0.28,col:'rgba(56,189,248,.4)'},{tok:' home',p:0.10,col:'rgba(74,222,128,.4)'},{tok:' one',p:0.07,col:'rgba(251,191,36,.4)'},{tok:' also',p:0.04,col:'rgba(244,114,182,.3)'}] },
+];
+
+var steps, maxSteps;
+
+function setMode(m) {
+  mode = m;
+  document.getElementById('tab-fwd').classList.toggle('active', m === 'forward');
+  document.getElementById('tab-gen').classList.toggle('active', m === 'generate');
+  reset();
+}
+
+function reset() {
+  currentStep = 0;
+  steps = mode === 'forward' ? FORWARD_STEPS : GEN_TOKENS;
+  maxSteps = steps.length;
+  document.getElementById('step-counter').textContent = 'Step 0 / ' + maxSteps;
+  document.getElementById('btn-step').disabled = false;
+  document.getElementById('stage-progress').textContent = 'Ready — click "step" to begin';
+  document.getElementById('pipeline').style.display = mode === 'forward' ? '' : 'none';
+  document.getElementById('gen-area').style.display = mode === 'generate' ? '' : 'none';
+
+  if (mode === 'forward') {
+    var html = '';
+    FORWARD_STEPS.forEach(function(s, i) {
+      html += '<div class="pipe-row" id="pipe-'+i+'">';
+      html += '<div class="pipe-box" id="pipebox-'+i+'"><div class="pipe-box-label">'+s.label+'</div><div class="pipe-box-val" style="color:'+s.color+';">'+s.val+'</div></div>';
+      if (i < FORWARD_STEPS.length - 1) html += '<div class="pipe-arrow">↓</div>';
+      html += '<div class="pipe-desc">'+s.desc+'</div>';
+      html += '</div>';
+    });
+    document.getElementById('pipeline').innerHTML = html;
+  } else {
+    document.getElementById('gen-output').innerHTML = '<span class="gen-cursor"></span>';
+    document.getElementById('prob-bars').innerHTML = '';
+  }
+
+  showExplain(-1);
+}
+
+function renderProbs(probs) {
+  var html = '';
+  probs.forEach(function(p) {
+    var pct = Math.round(p.p * 100);
+    html += '<div class="prob-row">';
+    html += '<div class="prob-token">'+p.tok+'</div>';
+    html += '<div class="prob-bar-wrap"><div class="prob-fill" style="width:0%;background:'+p.col+';" data-w="'+pct+'%"></div></div>';
+    html += '<div class="prob-pct">'+pct+'%</div>';
+    html += '</div>';
+  });
+  document.getElementById('prob-bars').innerHTML = html;
+  setTimeout(function() {
+    document.querySelectorAll('.prob-fill').forEach(function(el) {
+      el.style.width = el.dataset.w;
+    });
+  }, 50);
+}
+
+function step() {
+  if (currentStep >= maxSteps) return;
+
+  if (mode === 'forward') {
+    var row = document.getElementById('pipe-' + currentStep);
+    var box = document.getElementById('pipebox-' + currentStep);
+    if (row) row.classList.add('show');
+    if (box) box.classList.add('active');
+    showExplainFwd(currentStep);
+    document.getElementById('stage-progress').textContent = FORWARD_STEPS[currentStep].step;
+  } else {
+    var t = GEN_TOKENS[currentStep];
+    renderProbs(t.probs);
+    var out = document.getElementById('gen-output');
+    var colors = ['tok-a','tok-b','tok-c','tok-d','tok-a'];
+    var existing = out.querySelectorAll('.tok-chip');
+    var html = '';
+    existing.forEach(function(el) { html += el.outerHTML; });
+    html += '<span class="tok-chip tok-new ' + colors[currentStep % colors.length] + '">' + t.word + '</span>';
+    html += '<span class="gen-cursor"></span>';
+    out.innerHTML = html;
+    document.getElementById('stage-progress').textContent = 'Generated token: "' + t.word.trim() + '" (p=' + Math.round(t.probs[0].p*100) + '%)';
+    showExplain(currentStep);
+  }
+
+  currentStep++;
+  document.getElementById('step-counter').textContent = 'Step ' + currentStep + ' / ' + maxSteps;
+  if (currentStep >= maxSteps) {
+    document.getElementById('btn-step').disabled = true;
+    if (mode === 'forward') document.getElementById('stage-progress').textContent = 'Forward pass complete ✓';
+    else { var out2=document.getElementById('gen-output'); var chips=out2.querySelectorAll('.tok-chip'); var h=''; chips.forEach(function(e){h+=e.outerHTML;}); out2.innerHTML=h; document.getElementById('stage-progress').textContent = 'Generation complete ✓'; }
+  }
+}
+
+function playAll() {
+  reset();
+  var i = 0;
+  function next() { if (i < maxSteps) { step(); i++; setTimeout(next, 800); } }
+  setTimeout(next, 300);
+}
+
+function showExplainFwd(idx) {
+  var s = FORWARD_STEPS[idx];
+  document.getElementById('exp-step').textContent = s.step;
+  document.getElementById('exp-text').textContent = s.text;
+  document.getElementById('exp-tags').innerHTML = s.tags.map(function(t) {
+    return '<span class="tag tag-p">'+t+'</span>';
+  }).join('');
+}
+
+function showExplain(idx) {
+  if (idx < 0) {
+    document.getElementById('exp-step').textContent = mode === 'forward' ? 'How LLMs Work — The Full Picture' : 'How AI Generates Text — One Word at a Time';
+    document.getElementById('exp-text').textContent = mode === 'forward'
+      ? 'An LLM (Large Language Model) like ChatGPT or Claude takes your text, converts it to numbers, runs it through many "thinking layers", and produces scores for what word should come next. It does this one word at a time until the answer is complete. Click "step" to walk through each stage.'
+      : 'AI generates text one word (token) at a time. Each time, it looks at everything said so far and predicts the most likely next word. It keeps adding words until it finishes the thought. The whole process is called "autoregressive generation" — auto because it feeds its own output back as new input.';
+    document.getElementById('exp-tags').innerHTML = '';
+    return;
+  }
+  if (mode === 'forward') { showExplainFwd(idx); return; }
+  var t = GEN_TOKENS[idx];
+  document.getElementById('exp-step').textContent = 'Token ' + (idx+1) + ' — sampled "' + t.word.trim() + '"';
+  document.getElementById('exp-text').textContent = 'The model evaluated ' + t.probs.length + ' candidate tokens and assigned "' + t.word.trim() + '" the highest probability (' + Math.round(t.probs[0].p*100) + '%). With temperature=1.0, this token was sampled. The token is appended to the context and the model runs again.';
+  document.getElementById('exp-tags').innerHTML = '<span class="tag tag-p">AUTOREGRESSIVE</span><span class="tag tag-c">SAMPLING</span><span class="tag tag-a">TEMPERATURE</span>';
+}
+
+reset();
+</script>
+<script>(function(){var c=document.getElementById('ai-canvas'),x=c.getContext('2d'),w,h,cols,drops,CHARS='01λσ∇';function r(){w=c.width=window.innerWidth;h=c.height=window.innerHeight;cols=Math.floor(w/16);drops=new Array(cols).fill(0).map(function(){return Math.floor(Math.random()*-60);});}r();window.addEventListener('resize',r);var f=0;function d(){f++;requestAnimationFrame(d);if(f%5!==0)return;x.fillStyle='rgba(6,1,15,0.1)';x.fillRect(0,0,w,h);x.font='12px JetBrains Mono,monospace';for(var i=0;i<cols;i++){x.fillStyle=Math.random()>.95?'rgba(167,139,250,0.25)':'rgba(167,139,250,0.05)';x.fillText(CHARS[Math.floor(Math.random()*CHARS.length)],i*16,drops[i]*16);if(drops[i]*16>h&&Math.random()>.975)drops[i]=0;else drops[i]++;}}requestAnimationFrame(d);})();</script>
+<script src="../js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LoRA — llm-kit</title>
+  <link rel="stylesheet" href="../css/main.css" />
+  <style>
+    .matrix-vis { display:flex; gap:16px; align-items:center; flex-wrap:wrap; margin:12px 0; font-family:var(--mono); }
+    .matrix-box { border:1px solid var(--border2); border-radius:var(--r-md); padding:12px 16px; text-align:center; }
+    .matrix-size { font-size:13px; font-weight:700; margin-bottom:4px; }
+    .matrix-params { font-size:11px; color:var(--muted); }
+    .matrix-op { font-size:20px; color:var(--faint); padding:0 4px; }
+
+    .rank-slider { margin:16px 0; }
+    .param-bar { margin:8px 0; display:flex; align-items:center; gap:10px; font-family:var(--mono); font-size:12px; }
+    .param-track { flex:1; height:16px; background:var(--bg3); border-radius:99px; overflow:hidden; }
+    .param-fill { height:100%; border-radius:99px; display:flex; align-items:center; padding-left:8px; font-size:10px; font-weight:700; transition:width .5s; }
+  </style>
+</head>
+<body>
+<canvas id="ai-canvas" style="opacity:.15;"></canvas>
+<div class="grid-bg"></div>
+<div class="blob blob-3" style="opacity:.25;"></div>
+<nav class="nav scrolled">
+  <a class="nav-brand" href="../index.html"><span class="nav-brand-name">llm-kit</span><span class="nav-brand-by">@echobash</span></a>
+  <ul class="nav-links">
+    <li><a href="../index.html">home</a></li>
+    <li><a href="fine-tuning.html">fine-tuning</a></li>
+    <li><a href="quantization.html">quantization</a></li>
+    <li><a href="lora.html" class="active">lora</a></li>
+  </ul>
+</nav>
+<div class="tool-wrap">
+  <div class="tool-title">lora</div>
+  <div class="tool-sub">// Low-Rank Adaptation — how to fine-tune a huge model cheaply</div>
+
+  <div style="background:rgba(167,139,250,.06);border:1px solid rgba(167,139,250,.25);border-radius:var(--r-lg);padding:14px 18px;margin-bottom:24px;font-family:var(--mono);font-size:13px;color:var(--muted);line-height:1.7;">
+    💡 <strong style="color:var(--purple);">The core idea:</strong> A 7B model has 7 billion numbers (weights) to adjust. LoRA says: "instead of changing all 7B, add a tiny side network of ~10 million weights on top. Freeze the big model; train only the tiny adapter." You get 99% of the benefit at 1% of the cost. Like adding sticky notes to a book rather than rewriting the whole book.
+  </div>
+
+  <div class="mode-tabs">
+    <button class="mode-tab active" id="tab-vis"   onclick="setMode('vis')">Visual Explanation</button>
+    <button class="mode-tab" id="tab-rank"  onclick="setMode('rank')">Rank Explorer</button>
+    <button class="mode-tab" id="tab-why"   onclick="setMode('why')">LoRA vs Alternatives</button>
+  </div>
+
+  <div class="stage">
+    <div class="stage-bar">
+      <div class="stage-bar-left"><span class="wp wp-r"></span><span class="wp wp-y"></span><span class="wp wp-g"></span></div>
+      <span class="stage-progress" id="stage-progress">How LoRA works</span>
+    </div>
+    <div class="stage-body" id="stage-body">
+
+      <div id="mode-vis">
+        <div style="font-family:var(--mono);font-size:12px;color:var(--faint);margin-bottom:12px;">The original model has a weight matrix W (huge). LoRA adds two small matrices A and B. Their product (A×B) is much smaller, and only A and B are trained.</div>
+
+        <div class="matrix-vis">
+          <div class="matrix-box" style="border-color:rgba(167,139,250,.4);background:rgba(167,139,250,.07);">
+            <div class="matrix-size" style="color:var(--purple);">W (frozen)</div>
+            <div style="font-size:28px;margin:6px 0;">⬛</div>
+            <div class="matrix-params">4096 × 4096</div>
+            <div class="matrix-params" style="color:var(--purple);">16.7M params</div>
+            <div style="font-size:10px;color:var(--faint);margin-top:4px;">NOT trained</div>
+          </div>
+          <div class="matrix-op">+</div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+            <div class="matrix-box" style="border-color:rgba(74,222,128,.4);background:rgba(74,222,128,.07);">
+              <div class="matrix-size" style="color:var(--green);">A (trained)</div>
+              <div style="font-size:18px;margin:4px 0;">▬</div>
+              <div class="matrix-params">4096 × 16</div>
+              <div class="matrix-params" style="color:var(--green);">65K params</div>
+            </div>
+            <div style="font-size:11px;color:var(--faint);">×</div>
+            <div class="matrix-box" style="border-color:rgba(74,222,128,.4);background:rgba(74,222,128,.07);">
+              <div class="matrix-size" style="color:var(--green);">B (trained)</div>
+              <div style="font-size:14px;margin:4px 0;letter-spacing:2px;">▪▪▪</div>
+              <div class="matrix-params">16 × 4096</div>
+              <div class="matrix-params" style="color:var(--green);">65K params</div>
+            </div>
+          </div>
+          <div class="matrix-op">=</div>
+          <div style="font-family:var(--mono);">
+            <div style="font-size:12px;color:var(--muted);">The "rank 16" adapter</div>
+            <div style="font-size:11px;color:var(--green);margin-top:4px;">130K total trained</div>
+            <div style="font-size:11px;color:var(--purple);margin-top:2px;">vs 16.7M original</div>
+            <div style="font-size:11px;color:var(--amber);margin-top:4px;">= 0.8% of params!</div>
+          </div>
+        </div>
+
+        <div style="margin-top:16px;font-family:var(--mono);font-size:12px;color:var(--muted);line-height:1.7;">
+          <strong style="color:var(--purple);">Why does A×B work?</strong> Research discovered that the changes needed to fine-tune a model have "low intrinsic rank" — meaning the effective change can be expressed as a product of two small matrices. This is the key insight. The rank (16 in this example) controls the expressiveness of the adapter.
+        </div>
+      </div>
+
+      <div id="mode-rank" style="display:none;">
+        <div style="font-family:var(--mono);font-size:12px;color:var(--muted);margin-bottom:12px;">The "rank" number controls how many parameters LoRA trains. Higher rank = more expressive but more expensive. Drag to explore.</div>
+        <div class="rank-slider">
+          <div style="font-family:var(--mono);font-size:12px;color:var(--faint);margin-bottom:6px;">Rank: <span id="rank-value" style="color:var(--purple);font-weight:700;">16</span></div>
+          <input type="range" min="1" max="128" value="16" style="width:100%;accent-color:var(--purple);" oninput="updateRank(this.value)">
+        </div>
+        <div id="rank-display"></div>
+      </div>
+
+      <div id="mode-why" style="display:none;">
+        <div id="why-content"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="explain-panel">
+    <div class="explain-step" id="exp-step">What is "rank" in LoRA?</div>
+    <div class="explain-text" id="exp-text">Rank controls the size (expressiveness) of the LoRA adapter. Rank 4: very few parameters, fast, works for simple style/tone changes. Rank 16: good balance for most tasks. Rank 64+: large adapter, close to full fine-tuning quality but still much cheaper. Most practitioners use rank 8-32.</div>
+    <div class="explain-tags" id="exp-tags"><span class="tag tag-p">RANK 4-16 FOR MOST TASKS</span><span class="tag tag-g">0.1%-1% OF ORIGINAL PARAMS</span></div>
+  </div>
+</div><!-- ── Also by echobash strip ── -->
+<div class="also-strip">
+  <div class="also-inner">
+    <span class="also-label">also by echobash</span>
+    <div class="also-divider"></div>
+    <div class="also-links">
+      <a href="https://devdunia.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--cyan);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">devdunia</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">networking tools</span>
+      </a>
+      <a href="https://echobash.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--purple);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">echobash</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">portfolio</span>
+      </a>
+      <a href="https://promptflix.in" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--amber);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">promptflix</span><span class="also-link-tld">.in</span>
+        <span class="also-link-sub">prompt library</span>
+      </a>
+    </div>
+  </div>
+</div>
+<footer class="footer">
+  <p>built by echobash &nbsp;·&nbsp; <a href="https://devdunia.com" target="_blank" rel="noopener">devdunia.com</a> &nbsp;·&nbsp; <a href="https://echobash.com" target="_blank" rel="noopener">echobash.com</a> &nbsp;·&nbsp; <a href="https://promptflix.in" target="_blank" rel="noopener">promptflix.in</a></p>
+  <p style="margin-top:4px;">llm-kit is open source — AI tools for everyone</p>
+</footer>
+<script>
+function updateRank(r) {
+  r = parseInt(r);
+  document.getElementById('rank-value').textContent = r;
+  var baseParams = 4096 * 4096;
+  var loraParams = 2 * 4096 * r;
+  var pct = (loraParams / baseParams * 100).toFixed(2);
+  var html = '';
+  html += '<div class="param-bar"><div style="min-width:140px;font-family:var(--mono);font-size:12px;color:var(--muted);">Original model</div><div class="param-track"><div class="param-fill" style="width:100%;background:rgba(167,139,250,.4);">16.7M params</div></div><div style="font-family:var(--mono);font-size:12px;color:var(--purple);min-width:80px;text-align:right;">16.7M</div></div>';
+  html += '<div class="param-bar"><div style="min-width:140px;font-family:var(--mono);font-size:12px;color:var(--muted);">LoRA adapter</div><div class="param-track"><div class="param-fill" style="width:'+Math.max(1,pct)+'%;background:rgba(74,222,128,.6);">'+loraParams.toLocaleString()+'</div></div><div style="font-family:var(--mono);font-size:12px;color:var(--green);min-width:80px;text-align:right;">'+loraParams.toLocaleString()+'</div></div>';
+  html += '<div style="margin-top:10px;font-family:var(--mono);font-size:12px;color:var(--muted);">Rank <strong style="color:var(--purple);">'+r+'</strong> trains <strong style="color:var(--green);">'+pct+'%</strong> of the layer\'s parameters.</div>';
+
+  var uses = r <= 4 ? 'Good for: simple style changes, format changes' : r <= 16 ? 'Good for: most fine-tuning tasks, domain adaptation' : r <= 32 ? 'Good for: complex reasoning changes, strong specialization' : 'Good for: near full-fine-tune quality, challenging tasks';
+  html += '<div style="margin-top:8px;font-family:var(--mono);font-size:12px;color:var(--cyan);">'+uses+'</div>';
+
+  var cost = r <= 4 ? '$1-5' : r <= 16 ? '$5-30' : r <= 32 ? '$20-80' : '$50-200';
+  html += '<div style="margin-top:4px;font-family:var(--mono);font-size:12px;color:var(--amber);">Approx training cost (7B model, 1K examples): '+cost+'</div>';
+  document.getElementById('rank-display').innerHTML = html;
+}
+updateRank(16);
+
+var WHY_DATA = [
+  { method:'LoRA', color:'var(--green)', pros:'Very cheap, 0.1-1% of params, easy to share/swap, no forgetting', cons:'Slightly less quality than full fine-tune for very complex tasks', use:'Best for most use cases. Start here.' },
+  { method:'QLoRA', color:'var(--cyan)', pros:'Even cheaper — quantize base model to 4-bit, then add LoRA. Run on consumer GPU.', cons:'Slightly more quality loss. More complex setup.', use:'When you want to fine-tune on a laptop/consumer GPU.' },
+  { method:'Full Fine-tuning', color:'var(--amber)', pros:'Maximum quality. Changes everything the model knows.', cons:'Expensive ($100s-$1000s). Risk of catastrophic forgetting.', use:'Only when LoRA quality is genuinely insufficient.' },
+  { method:'Prompt Engineering', color:'var(--purple)', pros:'Free, instant, no training data needed.', cons:'Inconsistent, uses context space, can be bypassed.', use:'Always try this first before any training approach.' },
+  { method:'DoRA', color:'var(--pink)', pros:'Decomposed LoRA. Slightly better than LoRA on most benchmarks.', cons:'Newer, less tooling, slightly slower training.', use:'Newer alternative to LoRA when you want a small quality boost.' },
+];
+
+function buildWhy() {
+  var html = '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px;">';
+  html += '<tr style="border-bottom:1px solid var(--border);"><th style="text-align:left;padding:8px;color:var(--faint);">Method</th><th style="text-align:left;padding:8px;color:var(--faint);">Pros</th><th style="text-align:left;padding:8px;color:var(--faint);">Cons</th><th style="text-align:left;padding:8px;color:var(--faint);">When to use</th></tr>';
+  WHY_DATA.forEach(function(w) {
+    html += '<tr style="border-bottom:1px solid rgba(255,255,255,.05);"><td style="padding:10px 8px;font-weight:700;color:'+w.color+';">'+w.method+'</td><td style="padding:10px 8px;color:var(--green);">'+w.pros+'</td><td style="padding:10px 8px;color:var(--red);">'+w.cons+'</td><td style="padding:10px 8px;color:var(--muted);">'+w.use+'</td></tr>';
+  });
+  html += '</table></div>';
+  document.getElementById('why-content').innerHTML = html;
+}
+
+function setMode(m) {
+  ['vis','rank','why'].forEach(function(x) {
+    document.getElementById('mode-'+x).style.display = x===m?'':'none';
+    document.getElementById('tab-'+x).classList.toggle('active', x===m);
+  });
+  if (m==='why') buildWhy();
+  document.getElementById('stage-progress').textContent = m==='vis'?'How LoRA works':m==='rank'?'Explore rank vs parameters':'LoRA vs other methods';
+}
+</script>
+<script>(function(){var c=document.getElementById('ai-canvas'),x=c.getContext('2d'),w,h,cols,drops;function r(){w=c.width=window.innerWidth;h=c.height=window.innerHeight;cols=Math.floor(w/16);drops=new Array(cols).fill(0).map(function(){return Math.floor(Math.random()*-60);});}r();window.addEventListener('resize',r);var f=0;function d(){f++;requestAnimationFrame(d);if(f%5!==0)return;x.fillStyle='rgba(6,1,15,0.1)';x.fillRect(0,0,w,h);x.font='12px JetBrains Mono,monospace';for(var i=0;i<cols;i++){x.fillStyle=Math.random()>.96?'rgba(167,139,250,0.18)':'rgba(167,139,250,0.04)';x.fillText(Math.random()>.5?'A':'B',i*16,drops[i]*16);if(drops[i]*16>h&&Math.random()>.975)drops[i]=0;else drops[i]++;}}requestAnimationFrame(d);})();</script>
+<script src="../js/main.js"></script>
+</body>
+</html>

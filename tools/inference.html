@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    .phase-vis { display:flex; gap:10px; margin:12px 0; flex-wrap:wrap; }
+    .phase-box { flex:1; min-width:140px; padding:14px 16px; border-radius:var(--r-xl); border:2px solid; font-family:var(--mono); text-align:center; }
+    .phase-name { font-size:13px; font-weight:700; margin-bottom:4px; }
+    .phase-what { font-size:11px; color:var(--muted); line-height:1.4; }
+    .phase-speed { font-size:11px; margin-top:6px; }
+
+    .token-stream { display:flex; flex-wrap:wrap; gap:5px; padding:12px; background:rgba(0,0,0,.3); border-radius:var(--r-lg); border:1px solid var(--border); min-height:48px; }
+    .tok-gen { padding:4px 8px; border-radius:var(--r-sm); font-family:var(--mono); font-size:12px; font-weight:600; border:1px solid; opacity:0; transform:scale(0.8); transition:all .2s; }
+    .tok-gen.pop { opacity:1; transform:none; }
+
+    .metric-card { background:var(--bg2); border:1px solid var(--border2); border-radius:var(--r-xl); padding:14px 16px; text-align:center; font-family:var(--mono); }
+    .metric-val { font-size:24px; font-weight:700; }
+    .metric-label { font-size:11px; color:var(--faint); margin-top:4px; }
+  </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LLM Inference — llm-kit</title>
+  <link rel="stylesheet" href="../css/main.css" />
+</head>
+<body>
+<canvas id="ai-canvas" style="opacity:.15;"></canvas>
+<div class="grid-bg"></div>
+<div class="blob blob-3" style="opacity:.25;"></div>
+<nav class="nav scrolled">
+  <a class="nav-brand" href="../index.html"><span class="nav-brand-name">llm-kit</span><span class="nav-brand-by">@echobash</span></a>
+  <ul class="nav-links">
+    <li><a href="../index.html">home</a></li>
+    <li><a href="kv-cache.html">kv cache</a></li>
+    <li><a href="quantization.html">quantization</a></li>
+    <li><a href="inference.html" class="active">inference</a></li>
+  </ul>
+</nav>
+<div class="tool-wrap">
+  <div class="tool-title">llm_inference</div>
+  <div class="tool-sub">// What actually happens on the GPU between your prompt and the first word of response</div>
+
+  <div style="background:rgba(56,189,248,.06);border:1px solid rgba(56,189,248,.2);border-radius:var(--r-lg);padding:14px 18px;margin-bottom:24px;font-family:var(--mono);font-size:13px;color:var(--muted);line-height:1.7;">
+    💡 <strong style="color:var(--cyan);">The core idea:</strong> AI generation happens in two phases. Prefill: the AI reads and processes your entire prompt in one batch (fast). Decode: the AI generates one token at a time, feeding each new word back in to predict the next (slower). This is why short prompts feel faster and why the AI can't generate all tokens at once.
+  </div>
+
+  <div class="mode-tabs">
+    <button class="mode-tab active" id="tab-phases"  onclick="setMode('phases')">Prefill vs Decode</button>
+    <button class="mode-tab" id="tab-stream"  onclick="setMode('stream')">Streaming Demo</button>
+    <button class="mode-tab" id="tab-metrics" onclick="setMode('metrics')">Performance Metrics</button>
+  </div>
+
+  <div class="stage">
+    <div class="stage-bar">
+      <div class="stage-bar-left"><span class="wp wp-r"></span><span class="wp wp-y"></span><span class="wp wp-g"></span></div>
+      <span class="stage-progress" id="stage-progress">The two phases of LLM inference</span>
+    </div>
+    <div class="stage-body" id="stage-body">
+
+      <div id="mode-phases">
+        <div class="phase-vis">
+          <div class="phase-box" style="border-color:rgba(167,139,250,.4);background:rgba(167,139,250,.06);">
+            <div class="phase-name" style="color:var(--purple);">Phase 1: Prefill</div>
+            <div style="font-size:22px;margin:8px 0;">⚡</div>
+            <div class="phase-what">Read and process all your prompt tokens at once. Compute KV cache for each token. This is parallelized — all tokens computed in one GPU pass.</div>
+            <div class="phase-speed" style="color:var(--purple);">Fast, parallel, compute-bound</div>
+          </div>
+          <div class="phase-box" style="border-color:rgba(56,189,248,.4);background:rgba(56,189,248,.06);">
+            <div class="phase-name" style="color:var(--cyan);">Phase 2: Decode</div>
+            <div style="font-size:22px;margin:8px 0;">🔄</div>
+            <div class="phase-what">Generate one token at a time. Each new token gets fed back in. KV cache grows. Must be done sequentially — can't parallelize because each token depends on the previous one.</div>
+            <div class="phase-speed" style="color:var(--cyan);">Slow, sequential, memory-bound</div>
+          </div>
+        </div>
+
+        <div id="phase-steps" style="margin-top:12px;"></div>
+        <div class="ctrl-row" style="margin-top:8px;">
+          <button class="step-btn" onclick="stepPhase()">step →</button>
+          <button class="play-btn" onclick="playPhase()">▶ play all</button>
+          <button class="reset-btn" onclick="resetPhase()">↺ reset</button>
+          <span style="font-family:var(--mono);font-size:12px;color:var(--faint);" id="phase-counter">0 / 6</span>
+        </div>
+      </div>
+
+      <div id="mode-stream" style="display:none;">
+        <div style="font-family:var(--mono);font-size:12px;color:var(--faint);margin-bottom:8px;">Simulate a streaming response — one token at a time, as a real LLM API sends it:</div>
+        <div style="font-family:var(--mono);font-size:12px;color:var(--cyan);margin-bottom:8px;">Prompt: "In one sentence, explain what gravity is."</div>
+        <div class="token-stream" id="token-stream"></div>
+        <div class="ctrl-row" style="margin-top:12px;">
+          <button class="play-btn" onclick="playStream()">▶ stream response</button>
+          <button class="reset-btn" onclick="resetStream()">↺ reset</button>
+          <span style="font-family:var(--mono);font-size:12px;color:var(--faint);" id="stream-label">Click "stream response"</span>
+        </div>
+        <div style="margin-top:10px;font-family:var(--mono);font-size:12px;color:var(--muted);line-height:1.6;">
+          This is exactly how the OpenAI API works with <code style="color:var(--purple);">stream: true</code> — it sends each token as a Server-Sent Event (SSE). Your UI renders tokens as they arrive, making responses feel faster even though total time is the same.
+        </div>
+      </div>
+
+      <div id="mode-metrics" style="display:none;">
+        <div id="metrics-content"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="explain-panel">
+    <div class="explain-step" id="exp-step">Why is generation sequential?</div>
+    <div class="explain-text" id="exp-text">Each token is generated based on ALL previous tokens. To generate token 50, the AI needs tokens 1-49 as input. You can't generate token 50 without first having 49, which requires 48, and so on. This sequential dependency is fundamental to the autoregressive (next-token-prediction) design of all major LLMs.</div>
+    <div class="explain-tags" id="exp-tags"><span class="tag tag-p">PREFILL = PARALLEL (FAST)</span><span class="tag tag-c">DECODE = SEQUENTIAL (BOTTLENECK)</span></div>
+  </div>
+</div><!-- ── Also by echobash strip ── -->
+<div class="also-strip">
+  <div class="also-inner">
+    <span class="also-label">also by echobash</span>
+    <div class="also-divider"></div>
+    <div class="also-links">
+      <a href="https://devdunia.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--cyan);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">devdunia</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">networking tools</span>
+      </a>
+      <a href="https://echobash.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--purple);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">echobash</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">portfolio</span>
+      </a>
+      <a href="https://promptflix.in" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--amber);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">promptflix</span><span class="also-link-tld">.in</span>
+        <span class="also-link-sub">prompt library</span>
+      </a>
+    </div>
+  </div>
+</div>
+<footer class="footer">
+  <p>built by echobash &nbsp;·&nbsp; <a href="https://devdunia.com" target="_blank" rel="noopener">devdunia.com</a> &nbsp;·&nbsp; <a href="https://echobash.com" target="_blank" rel="noopener">echobash.com</a> &nbsp;·&nbsp; <a href="https://promptflix.in" target="_blank" rel="noopener">promptflix.in</a></p>
+  <p style="margin-top:4px;">llm-kit is open source — AI tools for everyone</p>
+</footer>
+<script>
+var PHASE_STEPS = [
+  { color:'var(--amber)',  title:'User sends: "What is photosynthesis?"', desc:'Your 4 words + any system prompt = N tokens total. The server receives all of them at once.' },
+  { color:'var(--purple)', title:'Prefill: Tokenize all input', desc:'All input tokens are processed simultaneously. The model runs one forward pass through all N tokens in parallel. GPU is maximally busy.' },
+  { color:'var(--purple)', title:'Prefill: Build KV cache', desc:'The K and V vectors for each input token are computed and stored in memory. This is the "reading" phase — the AI understands your whole question at once.' },
+  { color:'var(--cyan)',   title:'Decode: Generate token #1', desc:'Now the slow part. The AI samples from the probability distribution over all 50,000 vocabulary tokens to pick the most likely next word. E.g., "Photo" (50% probability).' },
+  { color:'var(--cyan)',   title:'Decode: Feed token back in', desc:'"Photo" is appended to the context. The model runs another forward pass, computing attention over all previous tokens + this new one. Generates next token: "synthesis".' },
+  { color:'var(--green)',  title:'Repeat until done', desc:'This loop continues token by token until the model generates a special <EOS> (end-of-sequence) token, or hits the max_tokens limit. Each iteration is ~10-50ms on a GPU.' },
+];
+
+var phaseStep = 0;
+function resetPhase() { phaseStep=0; document.getElementById('phase-steps').innerHTML=''; document.getElementById('phase-counter').textContent='0 / '+PHASE_STEPS.length; }
+function stepPhase() {
+  if (phaseStep >= PHASE_STEPS.length) return;
+  var s = PHASE_STEPS[phaseStep];
+  var el = document.createElement('div');
+  el.style.display = 'flex'; el.style.gap = '12px'; el.style.marginBottom = '10px';
+  el.style.opacity = '0'; el.style.transform = 'translateY(6px)'; el.style.transition = 'all .3s';
+  el.innerHTML = '<div style="flex:0 0 10px;margin-top:6px;width:10px;height:10px;border-radius:50%;background:'+s.color+';flex-shrink:0;"></div><div style="font-family:var(--mono);"><div style="font-size:13px;font-weight:700;color:'+s.color+';margin-bottom:3px;">'+s.title+'</div><div style="font-size:12px;color:var(--muted);line-height:1.6;">'+s.desc+'</div></div>';
+  document.getElementById('phase-steps').appendChild(el);
+  requestAnimationFrame(function() { el.style.opacity='1'; el.style.transform='none'; });
+  phaseStep++;
+  document.getElementById('phase-counter').textContent = phaseStep + ' / ' + PHASE_STEPS.length;
+}
+function playPhase() { resetPhase(); var i=0; function n(){if(i<PHASE_STEPS.length){stepPhase();i++;setTimeout(n,600);}} setTimeout(n,200); }
+
+var STREAM_TOKENS = [
+  { text:'Gravity', color:'rgba(167,139,250,.6)' },
+  { text:'is', color:'rgba(255,255,255,.3)' },
+  { text:'a', color:'rgba(255,255,255,.3)' },
+  { text:'fundamental', color:'rgba(56,189,248,.6)' },
+  { text:'force', color:'rgba(56,189,248,.5)' },
+  { text:'of', color:'rgba(255,255,255,.3)' },
+  { text:'nature', color:'rgba(74,222,128,.5)' },
+  { text:'that', color:'rgba(255,255,255,.3)' },
+  { text:'attracts', color:'rgba(251,191,36,.6)' },
+  { text:'all', color:'rgba(255,255,255,.3)' },
+  { text:'objects', color:'rgba(167,139,250,.5)' },
+  { text:'with', color:'rgba(255,255,255,.3)' },
+  { text:'mass', color:'rgba(56,189,248,.5)' },
+  { text:'toward', color:'rgba(255,255,255,.3)' },
+  { text:'each', color:'rgba(255,255,255,.3)' },
+  { text:'other', color:'rgba(74,222,128,.5)' },
+  { text:',', color:'rgba(255,255,255,.2)' },
+  { text:'like', color:'rgba(255,255,255,.3)' },
+  { text:'the', color:'rgba(255,255,255,.3)' },
+  { text:'pull', color:'rgba(251,191,36,.5)' },
+  { text:'that', color:'rgba(255,255,255,.3)' },
+  { text:'keeps', color:'rgba(255,255,255,.3)' },
+  { text:'Earth', color:'rgba(56,189,248,.6)' },
+  { text:'in', color:'rgba(255,255,255,.3)' },
+  { text:'orbit', color:'rgba(74,222,128,.6)' },
+  { text:'around', color:'rgba(255,255,255,.3)' },
+  { text:'the', color:'rgba(255,255,255,.3)' },
+  { text:'Sun', color:'rgba(251,191,36,.7)' },
+  { text:'.', color:'rgba(255,255,255,.2)' },
+];
+var streamTimer = null, streamIdx = 0;
+function resetStream() {
+  if (streamTimer) clearInterval(streamTimer);
+  streamIdx = 0;
+  document.getElementById('token-stream').innerHTML = '';
+  document.getElementById('stream-label').textContent = 'Click "stream response"';
+}
+function playStream() {
+  resetStream();
+  document.getElementById('stream-label').textContent = 'Streaming...';
+  streamTimer = setInterval(function() {
+    if (streamIdx >= STREAM_TOKENS.length) {
+      clearInterval(streamTimer);
+      document.getElementById('stream-label').textContent = '✓ Done — ' + STREAM_TOKENS.length + ' tokens generated';
+      return;
+    }
+    var t = STREAM_TOKENS[streamIdx];
+    var el = document.createElement('span');
+    el.className = 'tok-gen';
+    el.style.background = t.color + '33';
+    el.style.borderColor = t.color;
+    el.style.color = 'rgba(255,255,255,.85)';
+    el.textContent = t.text;
+    document.getElementById('token-stream').appendChild(el);
+    requestAnimationFrame(function() { el.classList.add('pop'); });
+    document.getElementById('stream-label').textContent = 'Token ' + (streamIdx+1) + ' / ' + STREAM_TOKENS.length;
+    streamIdx++;
+  }, 120);
+}
+
+var METRICS_DATA = [
+  { metric:'TTFT', full:'Time to First Token', color:'var(--purple)', def:'How long from sending your prompt until the first word appears. Dominated by prefill time. Target: < 500ms for good UX.', good:'< 500ms', bad:'> 2s' },
+  { metric:'TPS', full:'Tokens Per Second', color:'var(--cyan)', def:'How fast the model generates in the decode phase. GPT-4 Turbo: ~60 TPS. Groq hardware: 800+ TPS. Local llama.cpp: 10-50 TPS depending on GPU.', good:'> 30 TPS', bad:'< 5 TPS' },
+  { metric:'Latency', full:'Total response time', color:'var(--amber)', def:'TTFT + (output_tokens / TPS). If TTFT = 0.5s and output = 200 tokens at 60 TPS: total = 0.5 + 3.3 = 3.8s.', good:'< 5s', bad:'> 30s' },
+  { metric:'Throughput', full:'Requests per second', color:'var(--green)', def:'How many user requests the server handles simultaneously. Batching multiple requests together improves GPU utilization. Important for production APIs.', good:'> 50 req/s', bad:'< 5 req/s' },
+  { metric:'Cost/1k tokens', full:'Price per 1000 tokens', color:'var(--pink)', def:'Claude 3.7 Sonnet: $0.003/1k input, $0.015/1k output. GPT-4o: $0.005/$0.015. Cheaper small models: $0.0001-0.001.', good:'< $0.001', bad:'> $0.05' },
+];
+
+function buildMetrics() {
+  var html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:16px;">';
+  METRICS_DATA.forEach(function(m) {
+    html += '<div class="metric-card"><div class="metric-val" style="color:'+m.color+';">'+m.metric+'</div><div class="metric-label">'+m.full+'</div>';
+    html += '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:6px;line-height:1.4;">'+m.def+'</div>';
+    html += '<div style="font-family:var(--mono);font-size:10px;margin-top:6px;display:flex;gap:8px;"><span style="color:var(--green);">✓ '+m.good+'</span><span style="color:var(--red);">✗ '+m.bad+'</span></div>';
+    html += '</div>';
+  });
+  html += '</div>';
+  document.getElementById('metrics-content').innerHTML = html;
+}
+
+function setMode(m) {
+  ['phases','stream','metrics'].forEach(function(x) {
+    document.getElementById('mode-'+x).style.display = x===m?'':'none';
+    document.getElementById('tab-'+x).classList.toggle('active', x===m);
+  });
+  if (m==='metrics') buildMetrics();
+  document.getElementById('stage-progress').textContent = m==='phases'?'The two phases of LLM inference':m==='stream'?'Streaming token generation':'Performance metrics explained';
+}
+</script>
+<script>(function(){var c=document.getElementById('ai-canvas'),x=c.getContext('2d'),w,h,cols,drops;function r(){w=c.width=window.innerWidth;h=c.height=window.innerHeight;cols=Math.floor(w/16);drops=new Array(cols).fill(0).map(function(){return Math.floor(Math.random()*-60);});}r();window.addEventListener('resize',r);var f=0;function d(){f++;requestAnimationFrame(d);if(f%5!==0)return;x.fillStyle='rgba(6,1,15,0.1)';x.fillRect(0,0,w,h);x.font='12px JetBrains Mono,monospace';for(var i=0;i<cols;i++){x.fillStyle=Math.random()>.96?'rgba(56,189,248,0.18)':'rgba(56,189,248,0.04)';x.fillText(Math.random()>.5?'⏱':'▶',i*16,drops[i]*16);if(drops[i]*16>h&&Math.random()>.975)drops[i]=0;else drops[i]++;}}requestAnimationFrame(d);})();</script>
+<script src="../js/main.js"></script>
+</body>
+</html>

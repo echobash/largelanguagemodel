@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Training Process — llm-kit</title>
+  <link rel="stylesheet" href="../css/main.css" />
+  <style>
+    .train-step { display:flex; align-items:flex-start; gap:14px; margin-bottom:16px; opacity:0; transform:translateY(10px); transition:all .4s; }
+    .train-step.show { opacity:1; transform:none; }
+    .train-step.active .train-box { border-color:rgba(251,191,36,.5); background:rgba(251,191,36,.07); }
+    .train-num { font-family:var(--mono); font-size:13px; font-weight:700; color:var(--amber); background:rgba(251,191,36,.12); padding:4px 10px; border-radius:4px; flex-shrink:0; margin-top:2px; min-width:36px; text-align:center; }
+    .train-box { background:var(--bg2); border:1px solid var(--border2); border-radius:var(--r-lg); padding:14px 18px; flex:1; font-family:var(--mono); }
+    .train-box-title { font-size:14px; font-weight:700; margin-bottom:6px; }
+    .train-box-desc  { font-size:12px; color:var(--muted); line-height:1.6; }
+    .train-box-data  { margin-top:10px; font-size:12px; color:var(--cyan); padding:8px 12px; background:rgba(0,0,0,.3); border-radius:var(--r-sm); }
+
+    .loss-chart { position:relative; height:120px; background:rgba(0,0,0,.25); border-radius:var(--r-lg); border:1px solid var(--border); margin:12px 0; overflow:hidden; }
+    #loss-canvas { display:block; width:100%; height:100%; }
+    .loss-label { position:absolute; top:8px; left:12px; font-family:var(--mono); font-size:11px; color:var(--faint); }
+
+    .weight-vis { display:flex; gap:8px; flex-wrap:wrap; margin:10px 0; }
+    .weight-chip { font-family:var(--mono); font-size:11px; padding:4px 8px; border-radius:3px; border:1px solid; transition:all .3s; }
+  </style>
+</head>
+<body>
+<canvas id="ai-canvas" style="opacity:.15;"></canvas>
+<div class="grid-bg"></div>
+<div class="blob blob-1" style="opacity:.25;"></div>
+<nav class="nav scrolled">
+  <a class="nav-brand" href="../index.html"><span class="nav-brand-name">llm-kit</span><span class="nav-brand-by">@echobash</span></a>
+  <ul class="nav-links">
+    <li><a href="../index.html">home</a></li>
+    <li><a href="llm.html">llm</a></li>
+    <li><a href="fine-tuning.html">fine-tuning</a></li>
+    <li><a href="training.html" class="active">training</a></li>
+  </ul>
+</nav>
+<div class="tool-wrap">
+  <div class="tool-title">training_process</div>
+  <div class="tool-sub">// How an AI learns — guess, measure mistake, adjust, repeat billions of times</div>
+
+  <div style="background:rgba(251,191,36,.06);border:1px solid rgba(251,191,36,.2);border-radius:var(--r-lg);padding:14px 18px;margin-bottom:24px;font-family:var(--mono);font-size:13px;color:var(--muted);line-height:1.7;">
+    💡 <strong style="color:var(--amber);">The core idea:</strong> Training an AI is like teaching a child to ride a bike. The AI makes a guess, sees how wrong it was, adjusts, and tries again. After billions of such tries, it gets very good. The "adjustment" is done by a mathematical process called backpropagation.
+  </div>
+
+  <div class="ctrl-row">
+    <button class="step-btn" onclick="step()">step →</button>
+    <button class="play-btn" onclick="playAll()">▶ play all</button>
+    <button class="reset-btn" onclick="reset()">↺ reset</button>
+    <span style="font-family:var(--mono);font-size:12px;color:var(--faint);" id="step-counter">Step 0 / 6</span>
+  </div>
+
+  <div class="stage">
+    <div class="stage-bar">
+      <div class="stage-bar-left"><span class="wp wp-r"></span><span class="wp wp-y"></span><span class="wp wp-g"></span></div>
+      <span class="stage-progress" id="stage-progress">Ready — click "step" to begin</span>
+    </div>
+    <div class="stage-body">
+      <div id="train-steps"></div>
+      <div class="loss-chart"><canvas id="loss-canvas"></canvas><div class="loss-label">Training Loss ↓ (lower = better)</div></div>
+    </div>
+  </div>
+
+  <div class="explain-panel">
+    <div class="explain-step" id="exp-step">How does AI learn?</div>
+    <div class="explain-text" id="exp-text">Training an AI is all about repetition. The AI reads a sentence, tries to predict the next word, checks how wrong it was, then nudges its internal numbers slightly in the right direction. After doing this billions of times across terabytes of text, it gets very good at predicting words — and that's essentially what "intelligence" is in an LLM.</div>
+    <div class="explain-tags" id="exp-tags"></div>
+  </div>
+</div><!-- ── Also by echobash strip ── -->
+<div class="also-strip">
+  <div class="also-inner">
+    <span class="also-label">also by echobash</span>
+    <div class="also-divider"></div>
+    <div class="also-links">
+      <a href="https://devdunia.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--cyan);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">devdunia</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">networking tools</span>
+      </a>
+      <a href="https://echobash.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--purple);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">echobash</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">portfolio</span>
+      </a>
+      <a href="https://promptflix.in" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--amber);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">promptflix</span><span class="also-link-tld">.in</span>
+        <span class="also-link-sub">prompt library</span>
+      </a>
+    </div>
+  </div>
+</div>
+<footer class="footer">
+  <p>built by echobash &nbsp;·&nbsp; <a href="https://devdunia.com" target="_blank" rel="noopener">devdunia.com</a> &nbsp;·&nbsp; <a href="https://echobash.com" target="_blank" rel="noopener">echobash.com</a> &nbsp;·&nbsp; <a href="https://promptflix.in" target="_blank" rel="noopener">promptflix.in</a></p>
+  <p style="margin-top:4px;">llm-kit is open source — AI tools for everyone</p>
+</footer>
+<script>
+var currentStep = 0, lossHistory = [];
+
+var STEPS = [
+  {
+    num:'1', title:'Training Data', color:'var(--purple)',
+    desc:'The AI is fed enormous amounts of text — books, articles, websites, code. For a model like GPT-4, this is hundreds of gigabytes to terabytes of text. The AI will try to learn to predict any word given the words before it.',
+    data:'Training text: "The cat sat on the ___"  → correct answer: "mat"',
+    step:'Step 1 — Feed training data',
+    text:'Training data is like the AI\'s textbooks. The more diverse and high-quality the data, the smarter the AI becomes. The data is split into chunks called "tokens" and fed to the model in batches.',
+    tags:['TRAINING DATA','PRETRAINING','CORPUS'],
+    loss: 4.5
+  },
+  {
+    num:'2', title:'Forward Pass — Make a Guess', color:'var(--cyan)',
+    desc:'The AI reads the text and makes a prediction: "What is the next word?" At the start of training, it knows nothing, so it guesses randomly. It might say "banana" when the answer is "mat" — that\'s fine, it will learn!',
+    data:'Model guess: "banana" (random at start)\nCorrect answer: "mat"\nMistake: very large!',
+    step:'Step 2 — Forward pass (make a guess)',
+    text:'The forward pass is just the AI making a prediction. It takes the input text, processes it through all its layers, and outputs a probability for every possible next word. At the start, these probabilities are essentially random.',
+    tags:['FORWARD PASS','PREDICTION','LOGITS'],
+    loss: 4.2
+  },
+  {
+    num:'3', title:'Calculate Loss — How Wrong Was It?', color:'var(--red)',
+    desc:'The AI\'s mistake is measured with a number called "loss" (or "cross-entropy loss"). If it predicted "mat" with 90% confidence — loss is low. If it predicted "banana" with 90% confidence — loss is very high. The goal: minimize loss.',
+    data:'Loss = -log(probability_of_correct_token)\nIf correct prob = 0.01 → loss = 4.6 (very bad)\nIf correct prob = 0.90 → loss = 0.1 (very good)',
+    step:'Step 3 — Calculate how wrong it was (loss)',
+    text:'Loss is a single number measuring how bad the prediction was. Think of it as a score — but lower is better. During training, we watch this number decrease as the model improves. A random model starts with loss ~4.6 (since ln(100,000 vocab) ≈ 11.5). A trained model gets it down to around 1.5-2.0.',
+    tags:['CROSS-ENTROPY LOSS','OBJECTIVE FUNCTION','MINIMIZE'],
+    loss: 3.5
+  },
+  {
+    num:'4', title:'Backpropagation — Trace the Mistake', color:'var(--amber)',
+    desc:'Backpropagation is the key algorithm. It works backwards through the network, figuring out which "knobs" (weights) were responsible for the mistake and by how much. Think of it as detective work — tracing the error back to its source.',
+    data:'Error traced backward:\nLM Head → Layer 32 → Layer 31 → … → Layer 1\nEach layer gets a "gradient" = how much it contributed to the error',
+    step:'Step 4 — Backpropagation (trace the mistake)',
+    text:'Backpropagation uses calculus (chain rule) to calculate the "gradient" for every parameter in the network. The gradient is like a compass — it points in the direction that would make the error worse, so we go the opposite direction.',
+    tags:['BACKPROPAGATION','GRADIENTS','CHAIN RULE','CALCULUS'],
+    loss: 2.8
+  },
+  {
+    num:'5', title:'Gradient Descent — Adjust the Knobs', color:'var(--green)',
+    desc:'Now the model nudges every "knob" (weight) slightly in the direction that reduces the loss. The amount of nudge is controlled by the "learning rate" — too big and you overshoot, too small and training takes forever.',
+    data:'New weight = Old weight − (learning_rate × gradient)\nLearning rate: 0.0003 (typical)\nThis happens for every single weight — billions of them!',
+    step:'Step 5 — Gradient descent (adjust)',
+    text:'This is the actual learning step. For every one of the model\'s billions of parameters, we subtract a tiny fraction of its gradient. Over many repetitions, this gradually improves the model. The optimizer (AdamW) makes this process more efficient.',
+    tags:['GRADIENT DESCENT','ADAMW OPTIMIZER','LEARNING RATE','WEIGHT UPDATE'],
+    loss: 2.1
+  },
+  {
+    num:'6', title:'Repeat Billions of Times', color:'var(--purple)',
+    desc:'Steps 2-5 repeat for every batch of text in the training data — billions of times. Each repetition is called a "step". Training a GPT-3 sized model takes ~300 billion tokens, thousands of GPU-hours, and millions of dollars.',
+    data:'Llama 3 70B training:\n• 15 trillion tokens of text\n• 16,000 GPUs × several weeks\n• Loss drops from ~4.5 → ~1.6\n• Result: a model that understands language!',
+    step:'Step 6 — Repeat at massive scale',
+    text:'The magic of training is that after seeing enough examples, the AI starts to generalize — it learns concepts, not just memorized text. It discovers grammar, facts, reasoning patterns, and more, all just from the signal of "predict the next word".',
+    tags:['PRETRAINING','SCALE','NEXT TOKEN PREDICTION','EMERGENCE'],
+    loss: 1.6
+  }
+];
+
+function reset() {
+  currentStep = 0; lossHistory = [];
+  document.getElementById('step-counter').textContent = 'Step 0 / ' + STEPS.length;
+  document.getElementById('stage-progress').textContent = 'Ready — click "step" to begin';
+  document.getElementById('train-steps').innerHTML = '';
+  drawLoss();
+  document.getElementById('exp-step').textContent = 'How does AI learn?';
+  document.getElementById('exp-text').textContent = 'Training an AI is all about repetition. The AI reads a sentence, tries to predict the next word, checks how wrong it was, then nudges its internal numbers slightly in the right direction. After doing this billions of times across terabytes of text, it gets very good at predicting words — and that\'s essentially what "intelligence" is in an LLM.';
+  document.getElementById('exp-tags').innerHTML = '';
+}
+
+function step() {
+  if (currentStep >= STEPS.length) return;
+  var s = STEPS[currentStep];
+  lossHistory.push(s.loss);
+
+  var el = document.createElement('div');
+  el.className = 'train-step';
+  el.id = 'ts-' + currentStep;
+  el.innerHTML = '<div class="train-num">'+s.num+'</div><div class="train-box active"><div class="train-box-title" style="color:'+s.color+';">'+s.title+'</div><div class="train-box-desc">'+s.desc+'</div><div class="train-box-data">'+s.data.replace(/\n/g,'<br>')+'</div></div>';
+  document.getElementById('train-steps').appendChild(el);
+  requestAnimationFrame(function() { el.classList.add('show'); });
+
+  // Remove active from previous
+  document.querySelectorAll('.train-box.active').forEach(function(b,i,arr) { if(i<arr.length-1) b.classList.remove('active'); });
+
+  document.getElementById('exp-step').textContent = s.step;
+  document.getElementById('exp-text').textContent = s.text;
+  document.getElementById('exp-tags').innerHTML = s.tags.map(function(t){return '<span class="tag tag-a">'+t+'</span>';}).join('');
+  document.getElementById('stage-progress').textContent = s.step + ' — Loss: ' + s.loss;
+  currentStep++;
+  document.getElementById('step-counter').textContent = 'Step ' + currentStep + ' / ' + STEPS.length;
+  if (currentStep >= STEPS.length) document.getElementById('stage-progress').textContent = 'Training loop explained ✓';
+  drawLoss();
+}
+
+function drawLoss() {
+  var canvas = document.getElementById('loss-canvas');
+  canvas.width = canvas.offsetWidth || 600;
+  canvas.height = canvas.offsetHeight || 120;
+  var ctx = canvas.getContext('2d'); var W = canvas.width, H = canvas.height;
+  ctx.clearRect(0,0,W,H);
+  if (lossHistory.length < 2) return;
+  var maxL = 5, minL = 1;
+  ctx.beginPath(); ctx.strokeStyle = 'rgba(251,191,36,.8)'; ctx.lineWidth = 2;
+  lossHistory.forEach(function(l, i) {
+    var x = (i / (lossHistory.length - 1)) * (W - 40) + 20;
+    var y = H - ((l - minL) / (maxL - minL)) * (H - 30) - 15;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+  // Dots
+  lossHistory.forEach(function(l, i) {
+    var x = (i / (lossHistory.length - 1)) * (W - 40) + 20;
+    var y = H - ((l - minL) / (maxL - minL)) * (H - 30) - 15;
+    ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(251,191,36,.9)'; ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.5)'; ctx.font = '10px JetBrains Mono, monospace';
+    ctx.fillText(l.toFixed(1), x - 8, y - 8);
+  });
+}
+
+function playAll() { reset(); var i=0; function n(){if(i<STEPS.length){step();i++;setTimeout(n,700);}} setTimeout(n,300); }
+reset();
+window.addEventListener('resize', drawLoss);
+</script>
+<script>(function(){var c=document.getElementById('ai-canvas'),x=c.getContext('2d'),w,h,cols,drops;function r(){w=c.width=window.innerWidth;h=c.height=window.innerHeight;cols=Math.floor(w/16);drops=new Array(cols).fill(0).map(function(){return Math.floor(Math.random()*-60);});}r();window.addEventListener('resize',r);var f=0;function d(){f++;requestAnimationFrame(d);if(f%5!==0)return;x.fillStyle='rgba(6,1,15,0.1)';x.fillRect(0,0,w,h);x.font='12px JetBrains Mono,monospace';for(var i=0;i<cols;i++){x.fillStyle=Math.random()>.96?'rgba(251,191,36,0.2)':'rgba(251,191,36,0.04)';x.fillText(Math.random()>.5?'∇':'w',i*16,drops[i]*16);if(drops[i]*16>h&&Math.random()>.975)drops[i]=0;else drops[i]++;}}requestAnimationFrame(d);})();</script>
+<script src="../js/main.js"></script>
+</body>
+</html>

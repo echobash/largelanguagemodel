@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fine-tuning — llm-kit</title>
+  <link rel="stylesheet" href="../css/main.css" />
+  <style>
+    .compare-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:16px 0; }
+    @media(max-width:600px) { .compare-grid { grid-template-columns:1fr; } }
+    .cmp-card { background:var(--bg2); border:2px solid var(--border2); border-radius:var(--r-xl); padding:18px 20px; }
+    .cmp-title { font-family:var(--mono); font-size:15px; font-weight:700; margin-bottom:8px; }
+    .cmp-desc { font-family:var(--mono); font-size:12px; color:var(--muted); line-height:1.6; }
+    .cmp-pros { margin-top:10px; }
+    .cmp-pro  { font-family:var(--mono); font-size:11px; color:var(--green); margin-bottom:3px; }
+    .cmp-con  { font-family:var(--mono); font-size:11px; color:var(--red); margin-bottom:3px; }
+
+    .timeline { position:relative; padding-left:28px; }
+    .timeline::before { content:''; position:absolute; left:10px; top:0; bottom:0; width:2px; background:repeating-linear-gradient(to bottom, rgba(255,255,255,.15) 0,rgba(255,255,255,.15) 5px,transparent 5px,transparent 10px); }
+    .tl-item { position:relative; margin-bottom:20px; opacity:0; transform:translateX(-10px); transition:all .4s; }
+    .tl-item.show { opacity:1; transform:none; }
+    .tl-dot { position:absolute; left:-24px; top:4px; width:12px; height:12px; border-radius:50%; border:2px solid; }
+    .tl-title { font-family:var(--mono); font-size:13px; font-weight:700; margin-bottom:4px; }
+    .tl-body  { font-family:var(--mono); font-size:12px; color:var(--muted); line-height:1.6; }
+    .tl-data  { margin-top:8px; padding:8px 12px; background:rgba(0,0,0,.3); border-radius:var(--r-sm); border:1px solid var(--border); font-family:var(--mono); font-size:11px; color:var(--cyan); }
+  </style>
+</head>
+<body>
+<canvas id="ai-canvas" style="opacity:.15;"></canvas>
+<div class="grid-bg"></div>
+<div class="blob blob-2" style="opacity:.25;"></div>
+<nav class="nav scrolled">
+  <a class="nav-brand" href="../index.html"><span class="nav-brand-name">llm-kit</span><span class="nav-brand-by">@echobash</span></a>
+  <ul class="nav-links">
+    <li><a href="../index.html">home</a></li>
+    <li><a href="training.html">training</a></li>
+    <li><a href="lora.html">lora</a></li>
+    <li><a href="fine-tuning.html" class="active">fine-tuning</a></li>
+  </ul>
+</nav>
+<div class="tool-wrap">
+  <div class="tool-title">fine_tuning</div>
+  <div class="tool-sub">// Taking a general AI and teaching it to be an expert at one specific job</div>
+
+  <div style="background:rgba(74,222,128,.06);border:1px solid rgba(74,222,128,.2);border-radius:var(--r-lg);padding:14px 18px;margin-bottom:24px;font-family:var(--mono);font-size:13px;color:var(--muted);line-height:1.7;">
+    💡 <strong style="color:var(--green);">The core idea:</strong> Think of a general-purpose AI like a college graduate who studied everything. Fine-tuning is like sending them to medical school — they already know how to think and communicate; now they just learn medicine specifically. You take an existing AI and train it further on your own specialized data.
+  </div>
+
+  <div class="mode-tabs">
+    <button class="mode-tab active" id="tab-compare" onclick="setMode('compare')">Approaches Compared</button>
+    <button class="mode-tab" id="tab-steps" onclick="setMode('steps')">Fine-tuning Steps</button>
+  </div>
+
+  <div class="stage">
+    <div class="stage-bar">
+      <div class="stage-bar-left"><span class="wp wp-r"></span><span class="wp wp-y"></span><span class="wp wp-g"></span></div>
+      <span class="stage-progress" id="stage-progress">Compare different fine-tuning approaches</span>
+    </div>
+    <div class="stage-body" id="stage-body">
+
+      <div id="mode-compare">
+        <div class="compare-grid">
+          <div class="cmp-card" style="border-color:rgba(56,189,248,.3);">
+            <div class="cmp-title" style="color:var(--cyan);">Prompt Engineering</div>
+            <div class="cmp-desc">Add instructions to your prompt to guide the AI. No training needed — works with any AI via the API.</div>
+            <div class="cmp-pros">
+              <div class="cmp-pro">✓ Free — no training cost</div>
+              <div class="cmp-pro">✓ Instant — change anytime</div>
+              <div class="cmp-pro">✓ No data needed</div>
+              <div class="cmp-con">✗ Takes up context space</div>
+              <div class="cmp-con">✗ Inconsistent behavior</div>
+              <div class="cmp-con">✗ Easy to "break" with clever inputs</div>
+            </div>
+          </div>
+          <div class="cmp-card" style="border-color:rgba(167,139,250,.3);">
+            <div class="cmp-title" style="color:var(--purple);">LoRA Fine-tuning</div>
+            <div class="cmp-desc">Add a small set of "adapter" layers on top of the frozen model. Train only these (~1% of params). Very cheap.</div>
+            <div class="cmp-pros">
+              <div class="cmp-pro">✓ Very cheap to train</div>
+              <div class="cmp-pro">✓ Strong behavior change</div>
+              <div class="cmp-pro">✓ Easy to switch adapters</div>
+              <div class="cmp-con">✗ Still needs 100s-1000s of examples</div>
+              <div class="cmp-con">✗ Requires ML knowledge</div>
+            </div>
+          </div>
+          <div class="cmp-card" style="border-color:rgba(251,191,36,.3);">
+            <div class="cmp-title" style="color:var(--amber);">Full Fine-tuning</div>
+            <div class="cmp-desc">Update every weight in the entire model on your data. Strongest specialization. Expensive.</div>
+            <div class="cmp-pros">
+              <div class="cmp-pro">✓ Maximum customization</div>
+              <div class="cmp-pro">✓ Deeply learns your domain</div>
+              <div class="cmp-con">✗ Very expensive (GPUs × days)</div>
+              <div class="cmp-con">✗ Risk of "catastrophic forgetting"</div>
+              <div class="cmp-con">✗ Needs 10,000s+ examples</div>
+            </div>
+          </div>
+          <div class="cmp-card" style="border-color:rgba(74,222,128,.3);">
+            <div class="cmp-title" style="color:var(--green);">RAG (Retrieval)</div>
+            <div class="cmp-desc">Don't train at all — just give the AI relevant documents at query time. The AI reads the docs and answers based on them.</div>
+            <div class="cmp-pros">
+              <div class="cmp-pro">✓ No training cost</div>
+              <div class="cmp-pro">✓ Knowledge can be updated instantly</div>
+              <div class="cmp-pro">✓ Citations always available</div>
+              <div class="cmp-con">✗ Slower (retrieval step)</div>
+              <div class="cmp-con">✗ Limited by context window</div>
+            </div>
+          </div>
+        </div>
+        <div style="font-family:var(--mono);font-size:12px;color:var(--faint);text-align:center;margin-top:8px;">
+          When in doubt: try prompt engineering first → then RAG → then LoRA → full fine-tune as last resort
+        </div>
+      </div>
+
+      <div id="mode-steps" style="display:none;">
+        <div class="ctrl-row">
+          <button class="step-btn" onclick="stepFT()">step →</button>
+          <button class="play-btn" onclick="playFT()">▶ play all</button>
+          <button class="reset-btn" onclick="resetFT()">↺ reset</button>
+          <span style="font-family:var(--mono);font-size:12px;color:var(--faint);" id="ft-counter">Step 0 / 5</span>
+        </div>
+        <div class="timeline" id="ft-timeline"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="explain-panel">
+    <div class="explain-step" id="exp-step">When should you fine-tune?</div>
+    <div class="explain-text" id="exp-text">Fine-tune when: (1) you need consistent behavior across many requests, (2) your domain is very specialized (medical, legal, coding in a niche language), (3) you need the AI to follow a very specific format or tone every time. Don't fine-tune when: the task can be done with a good prompt, you only have a few dozen examples, or you need real-time updated information (use RAG instead).</div>
+    <div class="explain-tags" id="exp-tags"><span class="tag tag-g">START WITH PROMPTS</span><span class="tag tag-c">THEN TRY RAG</span><span class="tag tag-p">FINE-TUNE LAST</span></div>
+  </div>
+</div><!-- ── Also by echobash strip ── -->
+<div class="also-strip">
+  <div class="also-inner">
+    <span class="also-label">also by echobash</span>
+    <div class="also-divider"></div>
+    <div class="also-links">
+      <a href="https://devdunia.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--cyan);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">devdunia</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">networking tools</span>
+      </a>
+      <a href="https://echobash.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--purple);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">echobash</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">portfolio</span>
+      </a>
+      <a href="https://promptflix.in" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--amber);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">promptflix</span><span class="also-link-tld">.in</span>
+        <span class="also-link-sub">prompt library</span>
+      </a>
+    </div>
+  </div>
+</div>
+<footer class="footer">
+  <p>built by echobash &nbsp;·&nbsp; <a href="https://devdunia.com" target="_blank" rel="noopener">devdunia.com</a> &nbsp;·&nbsp; <a href="https://echobash.com" target="_blank" rel="noopener">echobash.com</a> &nbsp;·&nbsp; <a href="https://promptflix.in" target="_blank" rel="noopener">promptflix.in</a></p>
+  <p style="margin-top:4px;">llm-kit is open source — AI tools for everyone</p>
+</footer>
+<script>
+var mode = 'compare', ftStep = 0;
+
+var FT_STEPS = [
+  { title:'Collect Training Data', color:'var(--purple)',
+    body:'Gather examples of input → ideal output. For a customer service bot: 1,000+ pairs of (customer question, perfect response). Quality beats quantity — 500 great examples beats 5,000 mediocre ones.',
+    data:'Example pair:\nInput:  "How do I cancel my subscription?"\nOutput: "To cancel, go to Settings → Billing → Cancel Plan. Your access continues until the billing period ends."',
+    step:'Step 1 — Collect training examples',
+    text:'The data format matters. Each example teaches the model one pattern. If you want it to write in a specific style, show examples of that style. If you want it to answer support tickets, show examples of good support answers.' },
+  { title:'Choose Base Model', color:'var(--cyan)',
+    body:'Start from a pretrained model (Llama 3, Mistral, GPT-3.5 etc.) instead of from scratch. The base model already knows language, reasoning, and facts. You\'re just specializing it. This is transfer learning.',
+    data:'Popular base models for fine-tuning:\n• Meta Llama 3.1 8B / 70B (open source, free)\n• Mistral 7B (open source, fast)\n• GPT-3.5-turbo (via OpenAI API, easy)\n• Gemma 2 (Google, open source)',
+    step:'Step 2 — Choose a base model',
+    text:'You never train from scratch — that would cost millions of dollars. Instead, you start from a model that already works and just teach it new specialized behavior. Think of it like hiring an experienced person and training them on your company\'s specific processes.' },
+  { title:'Format Data & Train', color:'var(--amber)',
+    body:'Format data in the model\'s expected chat format (usually JSON), upload it, and kick off training. With LoRA on a cloud service like Replicate or Together AI, this can cost as little as $5-50 for a small model.',
+    data:'OpenAI format:\n[{"messages": [\n  {"role": "system", "content": "You are a customer support agent..."},\n  {"role": "user", "content": "How do I cancel?"},\n  {"role": "assistant", "content": "To cancel, go to..."}\n]}]',
+    step:'Step 3 — Format data and train',
+    text:'Training runs for several "epochs" — passes through your entire dataset. More epochs can overfit (memorize exactly, no generalization). 3-5 epochs is typical. Monitor your validation loss to know when to stop.' },
+  { title:'Evaluate the Model', color:'var(--green)',
+    body:'Test the fine-tuned model on examples it hasn\'t seen. Does it behave the way you wanted? Compare against the base model. Look for: correct format, right tone, accurate content, no hallucinations.',
+    data:'Evaluation:\nBase model on "Cancel subscription?" → generic answer\nFine-tuned model → accurate, specific to your product\n\nHuman eval: rate responses 1-5 on helpfulness\nAutomatic eval: compare against golden answers',
+    step:'Step 4 — Evaluate and test',
+    text:'Always test with a held-out set of examples the model never saw during training. If performance is great on training data but bad on new examples, the model "overfit" — it just memorized. Try reducing epochs or getting more varied training data.' },
+  { title:'Deploy & Monitor', color:'var(--purple)',
+    body:'Deploy the fine-tuned model in production. Monitor it over time — real-world inputs may differ from training data. Collect failure cases, add them to training data, and periodically retrain. This cycle is called continuous fine-tuning.',
+    data:'Deployment options:\n• OpenAI: fine-tuned model available via API\n• Replicate / Hugging Face: host your own\n• Run locally with Ollama (if small enough)\n• AWS / GCP / Azure: managed hosting',
+    step:'Step 5 — Deploy and monitor',
+    text:'Fine-tuning is not a one-time thing. As your product evolves and you collect real user feedback, you\'ll want to periodically retrain with new data. Keep a "failures" log — every time the model gives a bad answer, add the correct version to your next training batch.' }
+];
+
+var ftCurrent = 0;
+
+function setMode(m) {
+  mode = m;
+  document.getElementById('tab-compare').classList.toggle('active', m==='compare');
+  document.getElementById('tab-steps').classList.toggle('active', m==='steps');
+  document.getElementById('mode-compare').style.display = m==='compare' ? '' : 'none';
+  document.getElementById('mode-steps').style.display   = m==='steps'   ? '' : 'none';
+  if (m === 'compare') {
+    document.getElementById('exp-step').textContent = 'When should you fine-tune?';
+    document.getElementById('exp-text').textContent = 'Fine-tune when: (1) you need consistent behavior, (2) domain is very specialized, (3) need specific format every time. Don\'t fine-tune when: a good prompt works, you have few examples, or you need real-time info (use RAG instead).';
+  }
+}
+
+function resetFT() { ftCurrent = 0; document.getElementById('ft-counter').textContent = 'Step 0 / '+FT_STEPS.length; document.getElementById('ft-timeline').innerHTML = ''; }
+
+function stepFT() {
+  if (ftCurrent >= FT_STEPS.length) return;
+  var s = FT_STEPS[ftCurrent];
+  var el = document.createElement('div');
+  el.className = 'tl-item';
+  el.innerHTML = '<div class="tl-dot" style="background:'+s.color+'22;border-color:'+s.color+';"></div>' +
+    '<div class="tl-title" style="color:'+s.color+';">'+s.title+'</div>' +
+    '<div class="tl-body">'+s.body+'</div>' +
+    '<div class="tl-data">'+s.data.replace(/\n/g,'<br>')+'</div>';
+  document.getElementById('ft-timeline').appendChild(el);
+  requestAnimationFrame(function() { el.classList.add('show'); });
+  document.getElementById('exp-step').textContent = s.step;
+  document.getElementById('exp-text').textContent = s.text;
+  ftCurrent++;
+  document.getElementById('ft-counter').textContent = 'Step ' + ftCurrent + ' / ' + FT_STEPS.length;
+}
+
+function playFT() { resetFT(); var i=0; function n(){if(i<FT_STEPS.length){stepFT();i++;setTimeout(n,700);}} setTimeout(n,300); }
+</script>
+<script>(function(){var c=document.getElementById('ai-canvas'),x=c.getContext('2d'),w,h,cols,drops;function r(){w=c.width=window.innerWidth;h=c.height=window.innerHeight;cols=Math.floor(w/16);drops=new Array(cols).fill(0).map(function(){return Math.floor(Math.random()*-60);});}r();window.addEventListener('resize',r);var f=0;function d(){f++;requestAnimationFrame(d);if(f%5!==0)return;x.fillStyle='rgba(6,1,15,0.1)';x.fillRect(0,0,w,h);x.font='12px JetBrains Mono,monospace';for(var i=0;i<cols;i++){x.fillStyle=Math.random()>.96?'rgba(74,222,128,0.2)':'rgba(74,222,128,0.04)';x.fillText(Math.random()>.5?'W':'∆',i*16,drops[i]*16);if(drops[i]*16>h&&Math.random()>.975)drops[i]=0;else drops[i]++;}}requestAnimationFrame(d);})();</script>
+<script src="../js/main.js"></script>
+</body>
+</html>

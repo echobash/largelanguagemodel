@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Embeddings — llm-kit</title>
+  <link rel="stylesheet" href="../css/main.css" />
+  <style>
+    .emb-canvas-wrap { position:relative; background:rgba(0,0,0,.3); border:1px solid var(--border); border-radius:var(--r-xl); overflow:hidden; margin-bottom:16px; }
+    #emb-canvas { display:block; width:100%; height:380px; }
+    .emb-legend { display:flex; gap:16px; flex-wrap:wrap; margin-bottom:16px; font-family:var(--mono); font-size:12px; }
+    .emb-leg-item { display:flex; align-items:center; gap:6px; }
+    .emb-leg-dot { width:10px; height:10px; border-radius:50%; }
+
+    .sim-card { background:var(--bg2); border:1px solid var(--border2); border-radius:var(--r-lg); padding:16px; margin-bottom:12px; }
+    .sim-pair { display:flex; align-items:center; gap:12px; font-family:var(--mono); }
+    .sim-word { font-size:14px; font-weight:700; }
+    .sim-arrow { color:var(--faint); }
+    .sim-bar-wrap { flex:1; background:var(--bg3); border-radius:99px; height:10px; overflow:hidden; }
+    .sim-fill { height:100%; border-radius:99px; }
+    .sim-score { font-size:13px; font-weight:700; font-family:var(--mono); width:44px; text-align:right; }
+
+    .word-input-row { display:flex; gap:10px; margin:12px 0; flex-wrap:wrap; }
+    .word-chip {
+      padding:6px 14px; border-radius:99px; font-family:var(--mono); font-size:13px; font-weight:700;
+      border:2px solid; cursor:pointer; transition:all .2s;
+    }
+    .analogy-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:16px 0; font-family:var(--mono); font-size:14px; }
+    .analogy-word { padding:8px 16px; border-radius:var(--r-md); border:2px solid; font-weight:700; }
+    .analogy-op { color:var(--faint); font-size:18px; }
+    .analogy-result { padding:8px 16px; border-radius:var(--r-md); border:2px solid rgba(74,222,128,.5); background:rgba(74,222,128,.1); color:var(--green); font-weight:700; }
+  </style>
+</head>
+<body>
+<canvas id="ai-canvas" style="opacity:.15;"></canvas>
+<div class="grid-bg"></div>
+<div class="blob blob-2" style="opacity:.25;"></div>
+<nav class="nav scrolled">
+  <a class="nav-brand" href="../index.html"><span class="nav-brand-name">llm-kit</span><span class="nav-brand-by">@echobash</span></a>
+  <ul class="nav-links">
+    <li><a href="../index.html">home</a></li>
+    <li><a href="tokens.html">tokens</a></li>
+    <li><a href="embeddings.html" class="active">embeddings</a></li>
+    <li><a href="vector-db.html">vector db</a></li>
+  </ul>
+</nav>
+<div class="tool-wrap">
+  <div class="tool-title">embeddings</div>
+  <div class="tool-sub">// Words as coordinates — similar meaning = close together in space</div>
+
+  <div style="background:rgba(167,139,250,.06);border:1px solid rgba(167,139,250,.2);border-radius:var(--r-lg);padding:14px 18px;margin-bottom:24px;font-family:var(--mono);font-size:13px;color:var(--muted);line-height:1.7;">
+    💡 <strong style="color:var(--purple);">The core idea:</strong> Instead of storing words as text, AI turns every word (or sentence) into a list of numbers — like GPS coordinates in a very high-dimensional space. Words with similar meaning end up close together. "Cat" and "kitten" are nearby. "Cat" and "democracy" are far apart.
+  </div>
+
+  <div class="mode-tabs">
+    <button class="mode-tab active" id="tab-map" onclick="setMode('map')">Word Map (2D)</button>
+    <button class="mode-tab" id="tab-sim"  onclick="setMode('sim')">Similarity</button>
+    <button class="mode-tab" id="tab-ana"  onclick="setMode('analogy')">Word Analogies</button>
+  </div>
+
+  <div class="stage">
+    <div class="stage-bar">
+      <div class="stage-bar-left"><span class="wp wp-r"></span><span class="wp wp-y"></span><span class="wp wp-g"></span></div>
+      <span class="stage-progress" id="stage-progress">Click any word on the map to explore</span>
+    </div>
+    <div class="stage-body" id="stage-body">
+
+      <!-- Map mode -->
+      <div id="mode-map">
+        <div class="emb-legend" id="emb-legend"></div>
+        <div class="emb-canvas-wrap"><canvas id="emb-canvas"></canvas></div>
+        <div style="font-family:var(--mono);font-size:11px;color:var(--faint);">↑ This is a simplified 2D projection of word embeddings. In reality, embeddings have hundreds or thousands of dimensions.</div>
+      </div>
+
+      <!-- Similarity mode -->
+      <div id="mode-sim" style="display:none;">
+        <div style="font-family:var(--mono);font-size:13px;color:var(--muted);margin-bottom:16px;">How similar are these word pairs? 1.0 = identical, 0.0 = unrelated, negative = opposite</div>
+        <div id="sim-cards"></div>
+      </div>
+
+      <!-- Analogy mode -->
+      <div id="mode-analogy" style="display:none;">
+        <div style="font-family:var(--mono);font-size:13px;color:var(--muted);margin-bottom:8px;">Word analogies work because embeddings capture relationships as directions in space.</div>
+        <div style="font-family:var(--mono);font-size:12px;color:var(--faint);margin-bottom:16px;">"king" - "man" + "woman" = ? &nbsp;→ The vector math actually gives "queen"!</div>
+        <div id="analogies-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="explain-panel">
+    <div class="explain-step" id="exp-step">What is an embedding?</div>
+    <div class="explain-text" id="exp-text">An embedding turns a word (or sentence) into a list of numbers, like coordinates. These coordinates are carefully arranged so that words with similar meaning end up near each other. "Dog" and "puppy" end up close together. "Happy" and "joyful" end up close. "King" minus "man" plus "woman" actually equals "queen" in this number space — the math captures the relationship!</div>
+    <div class="explain-tags"><span class="tag tag-p">CLICK ANY WORD</span><span class="tag tag-c">TRY THE SIMILARITY TAB</span></div>
+  </div>
+</div><!-- ── Also by echobash strip ── -->
+<div class="also-strip">
+  <div class="also-inner">
+    <span class="also-label">also by echobash</span>
+    <div class="also-divider"></div>
+    <div class="also-links">
+      <a href="https://devdunia.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--cyan);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">devdunia</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">networking tools</span>
+      </a>
+      <a href="https://echobash.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--purple);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">echobash</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">portfolio</span>
+      </a>
+      <a href="https://promptflix.in" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--amber);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">promptflix</span><span class="also-link-tld">.in</span>
+        <span class="also-link-sub">prompt library</span>
+      </a>
+    </div>
+  </div>
+</div>
+<footer class="footer">
+  <p>built by echobash &nbsp;·&nbsp; <a href="https://devdunia.com" target="_blank" rel="noopener">devdunia.com</a> &nbsp;·&nbsp; <a href="https://echobash.com" target="_blank" rel="noopener">echobash.com</a> &nbsp;·&nbsp; <a href="https://promptflix.in" target="_blank" rel="noopener">promptflix.in</a></p>
+  <p style="margin-top:4px;">llm-kit is open source — AI tools for everyone</p>
+</footer>
+<script>
+var WORDS = [
+  { word:'king',   x:.15, y:.25, cat:'royalty',  color:'rgba(167,139,250,' },
+  { word:'queen',  x:.22, y:.20, cat:'royalty',  color:'rgba(167,139,250,' },
+  { word:'prince', x:.10, y:.30, cat:'royalty',  color:'rgba(167,139,250,' },
+  { word:'man',    x:.30, y:.55, cat:'people',   color:'rgba(56,189,248,' },
+  { word:'woman',  x:.38, y:.60, cat:'people',   color:'rgba(56,189,248,' },
+  { word:'boy',    x:.25, y:.65, cat:'people',   color:'rgba(56,189,248,' },
+  { word:'girl',   x:.32, y:.70, cat:'people',   color:'rgba(56,189,248,' },
+  { word:'dog',    x:.55, y:.30, cat:'animals',  color:'rgba(74,222,128,' },
+  { word:'cat',    x:.62, y:.25, cat:'animals',  color:'rgba(74,222,128,' },
+  { word:'puppy',  x:.60, y:.35, cat:'animals',  color:'rgba(74,222,128,' },
+  { word:'kitten', x:.67, y:.30, cat:'animals',  color:'rgba(74,222,128,' },
+  { word:'Paris',  x:.75, y:.55, cat:'cities',   color:'rgba(251,191,36,' },
+  { word:'London', x:.82, y:.50, cat:'cities',   color:'rgba(251,191,36,' },
+  { word:'France', x:.78, y:.62, cat:'countries',color:'rgba(244,114,182,' },
+  { word:'England',x:.85, y:.57, cat:'countries',color:'rgba(244,114,182,' },
+  { word:'happy',  x:.42, y:.12, cat:'emotions', color:'rgba(248,113,113,' },
+  { word:'joyful', x:.48, y:.10, cat:'emotions', color:'rgba(248,113,113,' },
+  { word:'sad',    x:.38, y:.85, cat:'emotions', color:'rgba(248,113,113,' },
+  { word:'doctor', x:.20, y:.80, cat:'jobs',     color:'rgba(56,189,248,' },
+  { word:'nurse',  x:.27, y:.82, cat:'jobs',     color:'rgba(56,189,248,' },
+];
+
+var CATS = { royalty:'var(--purple)', people:'var(--cyan)', animals:'var(--green)', cities:'var(--amber)', countries:'var(--pink)', emotions:'var(--red)', jobs:'var(--cyan)' };
+var selectedWord = null, mode = 'map';
+
+function setMode(m) {
+  mode = m;
+  ['map','sim','analogy'].forEach(function(x) {
+    document.getElementById('mode-'+x).style.display = x===m?'':'none';
+    document.getElementById('tab-'+x).classList.toggle('active', x===m);
+  });
+  if (m==='map') drawMap();
+  if (m==='sim') buildSim();
+  if (m==='analogy') buildAnalogy();
+}
+
+function drawMap(hover) {
+  var canvas = document.getElementById('emb-canvas');
+  canvas.width = canvas.offsetWidth;
+  canvas.height = canvas.offsetHeight;
+  var ctx = canvas.getContext('2d');
+  var W = canvas.width, H = canvas.height;
+  ctx.clearRect(0,0,W,H);
+
+  // Draw connecting lines for same categories
+  var cats = {};
+  WORDS.forEach(function(w) { if (!cats[w.cat]) cats[w.cat] = []; cats[w.cat].push(w); });
+  Object.keys(cats).forEach(function(c) {
+    var ws = cats[c];
+    ctx.strokeStyle = ws[0].color + '0.1)';
+    ctx.lineWidth = 1;
+    for (var i=0;i<ws.length;i++) for (var j=i+1;j<ws.length;j++) {
+      ctx.beginPath(); ctx.moveTo(ws[i].x*W, ws[i].y*H); ctx.lineTo(ws[j].x*W, ws[j].y*H); ctx.stroke();
+    }
+  });
+
+  WORDS.forEach(function(w) {
+    var px = w.x * W, py = w.y * H;
+    var isSelected = selectedWord && selectedWord.word === w.word;
+    var isHover = hover && hover.word === w.word;
+    var alpha = isSelected || isHover ? 1 : 0.7;
+    var r = isSelected ? 7 : isHover ? 6 : 5;
+
+    ctx.beginPath();
+    ctx.arc(px, py, r, 0, Math.PI*2);
+    ctx.fillStyle = w.color + alpha + ')';
+    ctx.fill();
+    if (isSelected) { ctx.strokeStyle = w.color + '1)'; ctx.lineWidth = 2; ctx.stroke(); }
+
+    ctx.font = (isSelected?'bold ':'') + '12px JetBrains Mono, monospace';
+    ctx.fillStyle = 'rgba(255,255,255,' + (isSelected?0.9:0.55) + ')';
+    ctx.fillText(w.word, px + 9, py + 4);
+  });
+
+  // Legend
+  var legHtml = '';
+  var seenCats = {};
+  WORDS.forEach(function(w) {
+    if (!seenCats[w.cat]) { seenCats[w.cat] = true;
+      legHtml += '<div class="emb-leg-item"><div class="emb-leg-dot" style="background:'+w.color+'0.8);"></div><span>'+w.cat+'</span></div>';
+    }
+  });
+  document.getElementById('emb-legend').innerHTML = legHtml;
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  var canvas = document.getElementById('emb-canvas');
+  canvas.addEventListener('click', function(e) {
+    var rect = canvas.getBoundingClientRect();
+    var mx = (e.clientX - rect.left) / canvas.offsetWidth;
+    var my = (e.clientY - rect.top) / canvas.offsetHeight;
+    var closest = null, minD = Infinity;
+    WORDS.forEach(function(w) {
+      var d = Math.sqrt((w.x-mx)**2 + (w.y-my)**2);
+      if (d < minD) { minD = d; closest = w; }
+    });
+    if (minD < 0.06) {
+      selectedWord = closest;
+      drawMap();
+      document.getElementById('exp-step').textContent = '"' + closest.word + '" in vector space';
+      var nearby = WORDS.filter(function(w) { return w !== closest && w.cat === closest.cat; }).slice(0,3).map(function(w){return w.word;});
+      document.getElementById('exp-text').textContent = '"' + closest.word + '" belongs to the "' + closest.cat + '" cluster. It sits close to: ' + nearby.join(', ') + '. Words in the same cluster have similar meanings and their number coordinates are close together. An AI uses these coordinates to understand relationships between concepts.';
+      document.getElementById('stage-progress').textContent = '"' + closest.word + '" → category: ' + closest.cat;
+    }
+  });
+  canvas.addEventListener('mousemove', function(e) {
+    var rect = canvas.getBoundingClientRect();
+    var mx = (e.clientX - rect.left) / canvas.offsetWidth;
+    var my = (e.clientY - rect.top) / canvas.offsetHeight;
+    var closest = null, minD = Infinity;
+    WORDS.forEach(function(w) { var d = Math.sqrt((w.x-mx)**2+(w.y-my)**2); if(d<minD){minD=d;closest=w;} });
+    drawMap(minD < 0.05 ? closest : null);
+    canvas.style.cursor = minD < 0.05 ? 'pointer' : 'default';
+  });
+});
+
+var SIM_PAIRS = [
+  { a:'king',  b:'queen',  sim:0.87, note:'Both are royalty — very similar' },
+  { a:'dog',   b:'puppy',  sim:0.94, note:'Puppy = baby dog — almost identical meaning' },
+  { a:'Paris', b:'France', sim:0.82, note:'Capital and country — closely related' },
+  { a:'happy', b:'joyful', sim:0.91, note:'Near synonyms — very close' },
+  { a:'man',   b:'woman',  sim:0.74, note:'Both are humans — similar but different' },
+  { a:'cat',   b:'dog',    sim:0.68, note:'Both are common pets' },
+  { a:'king',  b:'Paris',  sim:0.15, note:'Unrelated concepts — far apart' },
+  { a:'happy', b:'sad',    sim:-0.40, note:'Opposites — actually negative similarity!' },
+];
+
+function buildSim() {
+  var html = '';
+  SIM_PAIRS.forEach(function(p) {
+    var pct = ((p.sim + 1) / 2 * 100);
+    var color = p.sim > 0.8 ? 'var(--green)' : p.sim > 0.5 ? 'var(--amber)' : p.sim > 0 ? 'var(--purple)' : 'var(--red)';
+    html += '<div class="sim-card">';
+    html += '<div class="sim-pair">';
+    html += '<div class="sim-word" style="color:var(--purple);">'+p.a+'</div>';
+    html += '<div class="sim-arrow">↔</div>';
+    html += '<div class="sim-word" style="color:var(--cyan);">'+p.b+'</div>';
+    html += '<div class="sim-bar-wrap"><div class="sim-fill" style="width:'+pct+'%;background:'+color+';"></div></div>';
+    html += '<div class="sim-score" style="color:'+color+';">'+p.sim.toFixed(2)+'</div>';
+    html += '</div>';
+    html += '<div style="font-family:var(--mono);font-size:11px;color:var(--faint);margin-top:6px;">'+p.note+'</div>';
+    html += '</div>';
+  });
+  document.getElementById('sim-cards').innerHTML = html;
+  document.getElementById('exp-step').textContent = 'Cosine Similarity';
+  document.getElementById('exp-text').textContent = 'Similarity is measured with "cosine similarity" — it measures the angle between two word vectors. Score of 1.0 means identical direction (same meaning). Score of 0 means unrelated. Negative score means opposite meaning (like "happy" and "sad"). This is how AI knows words are related without being told!';
+  document.getElementById('stage-progress').textContent = 'Similarity scores between word pairs';
+}
+
+var ANALOGIES = [
+  { a:'king', minus:'man', plus:'woman', result:'queen',  exp:'"king" has a direction. Subtracting "man" and adding "woman" points to "queen" — the AI learned the relationship male↔female just from reading text.' },
+  { a:'Paris', minus:'France', plus:'Italy', result:'Rome', exp:'"Paris is to France as ____ is to Italy." Vector math: Paris - France + Italy = Rome. The embedding learned the "capital of" relationship!' },
+  { a:'dog', minus:'puppy', plus:'kitten', result:'cat',   exp:'"dog is to puppy as cat is to kitten." The embedding knows that puppy = baby dog, kitten = baby cat.' },
+  { a:'doctor', minus:'man', plus:'woman', result:'nurse', exp:'A famous (and controversial) example showing bias in training data — nurse came up as a female-associated doctor role.' },
+];
+
+function buildAnalogy() {
+  var html = '';
+  ANALOGIES.forEach(function(a) {
+    html += '<div style="background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r-xl);padding:16px 20px;margin-bottom:12px;">';
+    html += '<div class="analogy-row">';
+    html += '<div class="analogy-word" style="border-color:rgba(167,139,250,.5);background:rgba(167,139,250,.1);color:var(--purple);">'+a.a+'</div>';
+    html += '<div class="analogy-op">−</div>';
+    html += '<div class="analogy-word" style="border-color:rgba(56,189,248,.5);background:rgba(56,189,248,.1);color:var(--cyan);">'+a.minus+'</div>';
+    html += '<div class="analogy-op">+</div>';
+    html += '<div class="analogy-word" style="border-color:rgba(251,191,36,.5);background:rgba(251,191,36,.1);color:var(--amber);">'+a.plus+'</div>';
+    html += '<div class="analogy-op">=</div>';
+    html += '<div class="analogy-result">'+a.result+'</div>';
+    html += '</div>';
+    html += '<div style="font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:8px;line-height:1.6;">'+a.exp+'</div>';
+    html += '</div>';
+  });
+  document.getElementById('analogies-list').innerHTML = html;
+  document.getElementById('exp-step').textContent = 'Word Analogies — Math in Meaning Space';
+  document.getElementById('exp-text').textContent = 'The most famous result in AI word embeddings: "king" − "man" + "woman" = "queen". This shows that the AI learns the concept of gender as a direction in space — and that direction works consistently across related words. Nobody programmed this — the model learned it just by reading text.';
+  document.getElementById('stage-progress').textContent = 'Word analogies using vector arithmetic';
+}
+
+window.addEventListener('load', function() { drawMap(); });
+window.addEventListener('resize', function() { if (mode==='map') drawMap(); });
+</script>
+<script>(function(){var c=document.getElementById('ai-canvas'),x=c.getContext('2d'),w,h,cols,drops;function r(){w=c.width=window.innerWidth;h=c.height=window.innerHeight;cols=Math.floor(w/16);drops=new Array(cols).fill(0).map(function(){return Math.floor(Math.random()*-60);});}r();window.addEventListener('resize',r);var f=0;function d(){f++;requestAnimationFrame(d);if(f%5!==0)return;x.fillStyle='rgba(6,1,15,0.1)';x.fillRect(0,0,w,h);x.font='11px JetBrains Mono,monospace';for(var i=0;i<cols;i++){x.fillStyle=Math.random()>.97?'rgba(167,139,250,0.2)':'rgba(167,139,250,0.03)';x.fillText('·',i*16,drops[i]*16);if(drops[i]*16>h&&Math.random()>.975)drops[i]=0;else drops[i]++;}}requestAnimationFrame(d);})();</script>
+<script src="../js/main.js"></script>
+</body>
+</html>

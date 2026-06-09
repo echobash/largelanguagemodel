@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Function Calling — llm-kit</title>
+  <link rel="stylesheet" href="../css/main.css" />
+  <style>
+    .fn-call-block { background:var(--bg2); border:1px solid var(--border2); border-radius:var(--r-xl); padding:16px 20px; margin-bottom:12px; font-family:var(--mono); font-size:12px; }
+    .fn-label { font-size:10px; text-transform:uppercase; letter-spacing:.1em; color:var(--faint); margin-bottom:6px; }
+    .fn-user { color:var(--cyan); }
+    .fn-think { color:var(--amber); background:rgba(251,191,36,.06); padding:8px 12px; border-radius:var(--r-sm); border-left:3px solid var(--amber); margin:8px 0; }
+    .fn-call  { color:var(--green); background:rgba(74,222,128,.06); padding:8px 12px; border-radius:var(--r-sm); border-left:3px solid var(--green); margin:8px 0; }
+    .fn-result{ color:var(--purple); background:rgba(167,139,250,.06); padding:8px 12px; border-radius:var(--r-sm); border-left:3px solid var(--purple); margin:8px 0; }
+    .fn-answer{ color:var(--text); background:rgba(255,255,255,.04); padding:8px 12px; border-radius:var(--r-sm); border-left:3px solid rgba(255,255,255,.15); margin:8px 0; }
+
+    .schema-block { background:rgba(0,0,0,.4); border:1px solid rgba(74,222,128,.2); border-radius:var(--r-lg); padding:16px; font-family:var(--mono); font-size:11px; color:var(--green); overflow-x:auto; }
+    .schema-key { color:var(--cyan); }
+    .schema-val { color:var(--amber); }
+    .schema-str { color:var(--green); }
+
+    .fn-step { display:flex; gap:12px; padding:12px 16px; background:rgba(0,0,0,.2); border-radius:var(--r-lg); border:1px solid var(--border); margin-bottom:10px; opacity:0; transform:translateY(8px); transition:all .3s; }
+    .fn-step.show { opacity:1; transform:none; }
+    .fn-step-icon { font-size:20px; flex-shrink:0; }
+    .fn-step-label { font-family:var(--mono); font-size:13px; font-weight:700; margin-bottom:2px; }
+    .fn-step-desc { font-family:var(--mono); font-size:11px; color:var(--muted); line-height:1.5; }
+  </style>
+</head>
+<body>
+<canvas id="ai-canvas" style="opacity:.15;"></canvas>
+<div class="grid-bg"></div>
+<div class="blob blob-1" style="opacity:.25;"></div>
+<nav class="nav scrolled">
+  <a class="nav-brand" href="../index.html"><span class="nav-brand-name">llm-kit</span><span class="nav-brand-by">@echobash</span></a>
+  <ul class="nav-links">
+    <li><a href="../index.html">home</a></li>
+    <li><a href="agents.html">agents</a></li>
+    <li><a href="mcp.html">mcp</a></li>
+    <li><a href="function-calling.html" class="active">function calling</a></li>
+  </ul>
+</nav>
+<div class="tool-wrap">
+  <div class="tool-title">function_calling</div>
+  <div class="tool-sub">// How AI talks to external tools, APIs, and the real world</div>
+
+  <div style="background:rgba(74,222,128,.06);border:1px solid rgba(74,222,128,.2);border-radius:var(--r-lg);padding:14px 18px;margin-bottom:24px;font-family:var(--mono);font-size:13px;color:var(--muted);line-height:1.7;">
+    💡 <strong style="color:var(--green);">The core idea:</strong> By default, an AI only produces text — it can't check the weather, look things up, or send emails. Function calling lets you tell the AI: "Here are tools you can use." The AI decides when to use a tool, calls it with the right inputs, reads the result, and then answers. It's like giving a clever assistant access to a toolbox.
+  </div>
+
+  <div class="mode-tabs">
+    <button class="mode-tab active" id="tab-live" onclick="setMode('live')">Live Example</button>
+    <button class="mode-tab" id="tab-schema" onclick="setMode('schema')">How to Define a Tool</button>
+    <button class="mode-tab" id="tab-flow" onclick="setMode('flow')">Step-by-step Flow</button>
+  </div>
+
+  <div class="stage">
+    <div class="stage-bar">
+      <div class="stage-bar-left"><span class="wp wp-r"></span><span class="wp wp-y"></span><span class="wp wp-g"></span></div>
+      <span class="stage-progress" id="stage-progress">Watch an AI use a real tool</span>
+    </div>
+    <div class="stage-body" id="stage-body">
+
+      <div id="mode-live">
+        <div class="ctrl-row">
+          <button class="step-btn" onclick="stepLive()">step →</button>
+          <button class="play-btn" onclick="playLive()">▶ play all</button>
+          <button class="reset-btn" onclick="resetLive()">↺ reset</button>
+          <span style="font-family:var(--mono);font-size:12px;color:var(--faint);" id="live-counter">0 / 5 steps</span>
+        </div>
+        <div id="live-steps"></div>
+      </div>
+
+      <div id="mode-schema" style="display:none;">
+        <div style="font-family:var(--mono);font-size:12px;color:var(--muted);margin-bottom:12px;">You describe your tool in JSON so the AI knows what it does and what inputs it takes:</div>
+        <div class="schema-block">
+{<br>
+&nbsp;&nbsp;<span class="schema-key">"name"</span>: <span class="schema-str">"get_weather"</span>,<br>
+&nbsp;&nbsp;<span class="schema-key">"description"</span>: <span class="schema-str">"Get the current weather for a city. Use when the user asks about weather."</span>,<br>
+&nbsp;&nbsp;<span class="schema-key">"parameters"</span>: {<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="schema-key">"type"</span>: <span class="schema-str">"object"</span>,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="schema-key">"properties"</span>: {<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="schema-key">"city"</span>: {<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="schema-key">"type"</span>: <span class="schema-str">"string"</span>,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="schema-key">"description"</span>: <span class="schema-str">"City name, e.g. 'London' or 'New York'"</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;},<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="schema-key">"unit"</span>: {<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="schema-key">"type"</span>: <span class="schema-str">"string"</span>,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="schema-key">"enum"</span>: [<span class="schema-str">"celsius"</span>, <span class="schema-str">"fahrenheit"</span>],<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="schema-key">"description"</span>: <span class="schema-str">"Temperature unit"</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br>
+&nbsp;&nbsp;&nbsp;&nbsp;},<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="schema-key">"required"</span>: [<span class="schema-str">"city"</span>]<br>
+&nbsp;&nbsp;}<br>
+}
+        </div>
+        <div style="margin-top:14px;font-family:var(--mono);font-size:12px;color:var(--muted);line-height:1.7;">
+          <strong style="color:var(--purple);">How the AI uses this:</strong> The AI reads the description to know <em>when</em> to call the tool. It reads the parameters to know <em>what to send</em>. The AI never sees your actual code — just this JSON contract. You run the actual function on your side and send the result back.
+        </div>
+        <div style="margin-top:14px;display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;">
+          <div style="background:var(--bg2);border:1px solid rgba(74,222,128,.2);border-radius:var(--r-lg);padding:12px;font-family:var(--mono);">
+            <div style="font-size:11px;color:var(--green);font-weight:700;margin-bottom:4px;">search_web(query)</div>
+            <div style="font-size:11px;color:var(--muted);">Search the internet for current information</div>
+          </div>
+          <div style="background:var(--bg2);border:1px solid rgba(56,189,248,.2);border-radius:var(--r-lg);padding:12px;font-family:var(--mono);">
+            <div style="font-size:11px;color:var(--cyan);font-weight:700;margin-bottom:4px;">send_email(to, body)</div>
+            <div style="font-size:11px;color:var(--muted);">Send an email on the user's behalf</div>
+          </div>
+          <div style="background:var(--bg2);border:1px solid rgba(167,139,250,.2);border-radius:var(--r-lg);padding:12px;font-family:var(--mono);">
+            <div style="font-size:11px;color:var(--purple);font-weight:700;margin-bottom:4px;">run_python(code)</div>
+            <div style="font-size:11px;color:var(--muted);">Execute Python code and return results</div>
+          </div>
+          <div style="background:var(--bg2);border:1px solid rgba(251,191,36,.2);border-radius:var(--r-lg);padding:12px;font-family:var(--mono);">
+            <div style="font-size:11px;color:var(--amber);font-weight:700;margin-bottom:4px;">query_database(sql)</div>
+            <div style="font-size:11px;color:var(--muted);">Run a SQL query against your database</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="mode-flow" style="display:none;">
+        <div id="flow-content"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="explain-panel">
+    <div class="explain-step" id="exp-step">The big idea: AI + tools = agent</div>
+    <div class="explain-text" id="exp-text">Without function calling, an AI only produces text. With function calling, an AI can take actions in the world — search the internet, read files, write to a database, call any API. This is what transforms an AI chat interface into an AI agent that can actually do things for you.</div>
+    <div class="explain-tags" id="exp-tags"><span class="tag tag-g">AI DECIDES WHEN TO CALL</span><span class="tag tag-c">YOU DECIDE WHAT TOOLS EXIST</span><span class="tag tag-p">YOU RUN THE ACTUAL CODE</span></div>
+  </div>
+</div><!-- ── Also by echobash strip ── -->
+<div class="also-strip">
+  <div class="also-inner">
+    <span class="also-label">also by echobash</span>
+    <div class="also-divider"></div>
+    <div class="also-links">
+      <a href="https://devdunia.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--cyan);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">devdunia</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">networking tools</span>
+      </a>
+      <a href="https://echobash.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--purple);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">echobash</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">portfolio</span>
+      </a>
+      <a href="https://promptflix.in" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--amber);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">promptflix</span><span class="also-link-tld">.in</span>
+        <span class="also-link-sub">prompt library</span>
+      </a>
+    </div>
+  </div>
+</div>
+<footer class="footer">
+  <p>built by echobash &nbsp;·&nbsp; <a href="https://devdunia.com" target="_blank" rel="noopener">devdunia.com</a> &nbsp;·&nbsp; <a href="https://echobash.com" target="_blank" rel="noopener">echobash.com</a> &nbsp;·&nbsp; <a href="https://promptflix.in" target="_blank" rel="noopener">promptflix.in</a></p>
+  <p style="margin-top:4px;">llm-kit is open source — AI tools for everyone</p>
+</footer>
+<script>
+var LIVE_STEPS = [
+  { icon:'👤', label:'User asks:', color:'var(--cyan)',
+    html:'<div class="fn-user">"What\'s the weather in Tokyo right now, and should I bring an umbrella?"</div>' },
+  { icon:'🤔', label:'AI thinks:', color:'var(--amber)',
+    html:'<div class="fn-think">I need current weather data for Tokyo. I have a get_weather tool — I should call it with city="Tokyo".</div>' },
+  { icon:'🔧', label:'AI calls tool:', color:'var(--green)',
+    html:'<div class="fn-call">→ get_weather({ city: "Tokyo", unit: "celsius" })</div>' },
+  { icon:'📡', label:'Tool returns data:', color:'var(--purple)',
+    html:'<div class="fn-result">← { temp: 18, condition: "light rain", humidity: 78, forecast: "rainy all day" }</div>' },
+  { icon:'💬', label:'AI answers:', color:'var(--text)',
+    html:'<div class="fn-answer">It\'s 18°C in Tokyo with light rain right now — and it\'s expected to stay rainy all day. Yes, definitely bring an umbrella!</div>' },
+];
+
+var liveStep = 0;
+function resetLive() { liveStep=0; document.getElementById('live-steps').innerHTML=''; document.getElementById('live-counter').textContent='0 / '+LIVE_STEPS.length+' steps'; }
+function stepLive() {
+  if (liveStep >= LIVE_STEPS.length) return;
+  var s = LIVE_STEPS[liveStep];
+  var div = document.createElement('div');
+  div.className = 'fn-call-block';
+  div.style.opacity = '0';
+  div.style.transform = 'translateY(8px)';
+  div.style.transition = 'all .3s';
+  div.innerHTML = '<div class="fn-label" style="color:'+s.color+';">'+s.icon+' '+s.label+'</div>'+s.html;
+  document.getElementById('live-steps').appendChild(div);
+  requestAnimationFrame(function() { div.style.opacity='1'; div.style.transform='none'; });
+  liveStep++;
+  document.getElementById('live-counter').textContent = liveStep + ' / ' + LIVE_STEPS.length + ' steps';
+  document.getElementById('exp-step').textContent = ['User sends message', 'AI decides to use a tool', 'AI generates function call JSON', 'Your code runs the function', 'AI uses result to answer'][liveStep-1];
+  document.getElementById('exp-text').textContent = ['The user asks a question that requires real-world data the AI doesn\'t have.', 'The AI reads its list of available tools and decides the get_weather tool is the right one to use. It doesn\'t call it yet — it generates a structured call.', 'The AI outputs a structured JSON object with the function name and the parameters it wants to pass. This is NOT code running — it\'s just text in JSON format.', 'Your app receives the AI\'s function call, runs your actual get_weather() function, and sends the result back to the AI as a new message.', 'The AI reads the weather data and uses it to compose a helpful, natural-language answer.'][liveStep-1];
+}
+function playLive() { resetLive(); var i=0; function n(){if(i<LIVE_STEPS.length){stepLive();i++;setTimeout(n,600);}} setTimeout(n,200); }
+
+var FLOW_DATA = [
+  { num:'1', color:'var(--purple)', title:'You define tools', desc:'You write a JSON description of each tool: its name, what it does (description), and what inputs it accepts (parameters). You give this list to the AI at the start of the conversation.' },
+  { num:'2', color:'var(--cyan)',   title:'AI reads tool definitions', desc:'The AI reads all your tool descriptions as part of its "system prompt" (instructions). It now knows what tools exist and when to use them.' },
+  { num:'3', color:'var(--amber)',  title:'User asks something', desc:'A user asks a question. The AI decides: "Can I answer this myself? Or do I need a tool?" If a tool helps, it generates a function call.' },
+  { num:'4', color:'var(--green)',  title:'Your code runs the tool', desc:'The AI\'s output includes a structured call (function name + arguments). Your application intercepts this, runs the actual function, and gets the result.' },
+  { num:'5', color:'var(--pink)',   title:'Result goes back to AI', desc:'You send the tool\'s result back to the AI as a new message. The AI now has the real data it needed.' },
+  { num:'6', color:'var(--text)',   title:'AI generates final answer', desc:'With the tool result in hand, the AI writes a complete, helpful answer that combines its language ability with the real data from your tool.' },
+];
+
+function buildFlow() {
+  var html = '';
+  FLOW_DATA.forEach(function(f) {
+    html += '<div style="display:flex;gap:14px;margin-bottom:14px;"><div style="flex:0 0 30px;height:30px;border-radius:50%;background:rgba(0,0,0,.4);border:2px solid '+f.color+';display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:12px;font-weight:700;color:'+f.color+';flex-shrink:0;">'+f.num+'</div><div><div style="font-family:var(--mono);font-size:13px;font-weight:700;color:'+f.color+';margin-bottom:4px;">'+f.title+'</div><div style="font-family:var(--mono);font-size:12px;color:var(--muted);line-height:1.6;">'+f.desc+'</div></div></div>';
+  });
+  document.getElementById('flow-content').innerHTML = html;
+}
+
+function setMode(m) {
+  ['live','schema','flow'].forEach(function(x) {
+    document.getElementById('mode-'+x).style.display = x===m?'':'none';
+    document.getElementById('tab-'+x).classList.toggle('active', x===m);
+  });
+  if (m==='flow') buildFlow();
+  document.getElementById('stage-progress').textContent = m==='live'?'Watch an AI use a real tool':m==='schema'?'JSON schema for a tool':'How the whole flow works';
+}
+</script>
+<script>(function(){var c=document.getElementById('ai-canvas'),x=c.getContext('2d'),w,h,cols,drops;function r(){w=c.width=window.innerWidth;h=c.height=window.innerHeight;cols=Math.floor(w/16);drops=new Array(cols).fill(0).map(function(){return Math.floor(Math.random()*-60);});}r();window.addEventListener('resize',r);var f=0;function d(){f++;requestAnimationFrame(d);if(f%5!==0)return;x.fillStyle='rgba(6,1,15,0.1)';x.fillRect(0,0,w,h);x.font='12px JetBrains Mono,monospace';for(var i=0;i<cols;i++){x.fillStyle=Math.random()>.96?'rgba(74,222,128,0.18)':'rgba(74,222,128,0.04)';x.fillText(Math.random()>.5?'()':'{',i*16,drops[i]*16);if(drops[i]*16>h&&Math.random()>.975)drops[i]=0;else drops[i]++;}}requestAnimationFrame(d);})();</script>
+<script src="../js/main.js"></script>
+</body>
+</html>

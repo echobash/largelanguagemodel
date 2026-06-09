@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RAG Pipeline — llm-kit</title>
+  <link rel="stylesheet" href="../css/main.css" />
+  <style>
+    .rag-lane { display:flex; align-items:center; gap:0; margin:8px 0; opacity:0; transform:translateX(-12px); transition:opacity .45s, transform .45s; }
+    .rag-lane.show { opacity:1; transform:none; }
+    .rag-node {
+      background:var(--bg2); border:2px solid var(--border2); border-radius:var(--r-lg);
+      padding:12px 16px; font-family:var(--mono); font-size:12px; text-align:center;
+      min-width:140px; flex-shrink:0;
+    }
+    .rag-node.active { box-shadow:0 0 20px rgba(74,222,128,.2); }
+    .rag-node-icon { font-size:22px; margin-bottom:4px; }
+    .rag-node-label { font-size:9px; text-transform:uppercase; letter-spacing:.1em; color:var(--faint); margin-bottom:3px; }
+    .rag-node-name  { font-weight:700; font-size:12px; }
+    .rag-node-sub   { font-size:10px; color:var(--muted); margin-top:2px; }
+    .rag-arrow { flex:1; display:flex; align-items:center; padding:0 6px; }
+    .rag-arrow-line { flex:1; height:2px; position:relative; }
+    .rag-arrow-line::after { content:''; position:absolute; inset:0; background:currentColor; }
+    .rag-arrow-head { width:0; height:0; border-top:5px solid transparent; border-bottom:5px solid transparent; border-left:9px solid currentColor; }
+    .rag-arrow-label { position:absolute; top:-16px; left:50%; transform:translateX(-50%); font-family:var(--mono); font-size:10px; white-space:nowrap; color:var(--faint); }
+
+    .rag-docs {
+      display:flex; gap:8px; flex-wrap:wrap; margin:12px 0;
+      padding:12px; background:rgba(0,0,0,.25);
+      border-radius:var(--r-md); border:1px solid var(--border);
+    }
+    .rag-doc {
+      padding:6px 10px; border-radius:var(--r-sm); font-family:var(--mono); font-size:11px;
+      border:1px solid var(--border2); background:var(--bg3); color:var(--muted);
+      transition:all .3s; cursor:default;
+    }
+    .rag-doc.retrieved { border-color:rgba(74,222,128,.5); background:rgba(74,222,128,.1); color:var(--green); }
+    .rag-doc.top { border-color:rgba(167,139,250,.5); background:rgba(167,139,250,.12); color:var(--purple); font-weight:700; }
+
+    .rag-context {
+      padding:12px; background:rgba(0,0,0,.3); border-radius:var(--r-md);
+      border:1px solid var(--border); font-family:var(--mono); font-size:12px;
+      color:var(--muted); line-height:1.7; display:none;
+    }
+    .rag-context.show { display:block; }
+    .rag-context-prompt { color:var(--purple); }
+
+    .sim-scores { display:flex; flex-direction:column; gap:6px; margin:10px 0; }
+    .sim-row { display:flex; align-items:center; gap:8px; font-family:var(--mono); font-size:11px; }
+    .sim-doc { width:200px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .sim-bar-wrap { flex:1; height:6px; background:var(--bg3); border-radius:99px; overflow:hidden; }
+    .sim-fill { height:100%; border-radius:99px; background:var(--green); transition:width .8s var(--ease); }
+    .sim-pct { width:36px; text-align:right; color:var(--green); }
+  </style>
+</head>
+<body>
+<canvas id="ai-canvas" style="opacity:.2;"></canvas>
+<div class="grid-bg"></div>
+<div class="blob blob-2" style="opacity:.3;"></div>
+
+<nav class="nav scrolled">
+  <a class="nav-brand" href="../index.html"><span class="nav-brand-name">llm-kit</span><span class="nav-brand-by">@echobash</span></a>
+  <ul class="nav-links">
+    <li><a href="../index.html">home</a></li>
+    <li><a href="llm.html">llm</a></li>
+    <li><a href="vector-db.html">vector db</a></li>
+    <li><a href="rag.html" class="active">rag</a></li>
+    <li><a href="agents.html">agents</a></li>
+  </ul>
+</nav>
+
+<div class="tool-wrap">
+  <div class="tool-title">rag_pipeline</div>
+  <div class="tool-sub">// Query → Embed → Retrieve → Augment → Generate — step by step</div>
+
+  <div class="ctrl-row">
+    <button class="step-btn" id="btn-step" onclick="step()">step →</button>
+    <button class="play-btn" onclick="playAll()">▶ play all</button>
+    <button class="reset-btn" onclick="reset()">↺ reset</button>
+    <span style="font-family:var(--mono);font-size:12px;color:var(--faint);margin-left:4px;" id="step-counter">Step 0 / 7</span>
+  </div>
+
+  <div class="stage">
+    <div class="stage-bar">
+      <div class="stage-bar-left"><span class="wp wp-r"></span><span class="wp wp-y"></span><span class="wp wp-g"></span></div>
+      <span class="stage-progress" id="stage-progress">Ready — click "step" to begin</span>
+    </div>
+    <div class="stage-body" id="stage-body">
+
+      <!-- Query -->
+      <div class="rag-lane" id="lane-0">
+        <div class="rag-node" id="node-0" style="border-color:rgba(167,139,250,.3);">
+          <div class="rag-node-icon">💬</div>
+          <div class="rag-node-label">User Query</div>
+          <div class="rag-node-name" style="color:var(--purple);">"What causes inflation?"</div>
+        </div>
+      </div>
+
+      <!-- Embed query -->
+      <div class="rag-lane" id="lane-1" style="padding-left:20px;">
+        <div class="rag-arrow" style="color:var(--purple); max-width:40px;"><div style="width:2px;height:28px;background:var(--purple);margin:auto;"></div></div>
+      </div>
+      <div class="rag-lane" id="lane-2">
+        <div class="rag-node" id="node-2" style="border-color:rgba(56,189,248,.3);">
+          <div class="rag-node-icon">📐</div>
+          <div class="rag-node-label">Embedding Model</div>
+          <div class="rag-node-name" style="color:var(--cyan);">Query → Vector</div>
+          <div class="rag-node-sub">[0.23, -0.71, 0.44, …] ×1536</div>
+        </div>
+      </div>
+
+      <!-- Similarity search -->
+      <div class="rag-lane" id="lane-3" style="padding-left:20px;">
+        <div class="rag-arrow" style="color:var(--cyan); max-width:40px;"><div style="width:2px;height:28px;background:var(--cyan);margin:auto;"></div></div>
+      </div>
+      <div class="rag-lane" id="lane-4">
+        <div class="rag-node" id="node-4" style="border-color:rgba(74,222,128,.3);">
+          <div class="rag-node-icon">🔍</div>
+          <div class="rag-node-label">Vector DB</div>
+          <div class="rag-node-name" style="color:var(--green);">ANN Search</div>
+          <div class="rag-node-sub">cosine similarity</div>
+        </div>
+        <div style="flex:1;padding:0 16px;">
+          <div style="font-family:var(--mono);font-size:11px;color:var(--faint);margin-bottom:8px;">SIMILARITY SCORES (top-5)</div>
+          <div class="sim-scores" id="sim-scores"></div>
+          <div class="rag-docs" id="rag-docs" style="display:none;">
+            <div class="rag-doc" id="doc-0">📄 Federal Reserve 2023 Report</div>
+            <div class="rag-doc" id="doc-1">📄 Investopedia: Inflation Causes</div>
+            <div class="rag-doc" id="doc-2">📄 IMF Monetary Policy Paper</div>
+            <div class="rag-doc" id="doc-3">📄 CPI Historical Data</div>
+            <div class="rag-doc" id="doc-4">📄 Supply Chain Disruptions Study</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Augment -->
+      <div class="rag-lane" id="lane-5" style="padding-left:20px;">
+        <div class="rag-arrow" style="color:var(--green); max-width:40px;"><div style="width:2px;height:28px;background:var(--green);margin:auto;"></div></div>
+      </div>
+      <div class="rag-lane" id="lane-6">
+        <div class="rag-node" id="node-6" style="border-color:rgba(251,191,36,.3);">
+          <div class="rag-node-icon">📝</div>
+          <div class="rag-node-label">Prompt Builder</div>
+          <div class="rag-node-name" style="color:var(--amber);">Augmented Prompt</div>
+          <div class="rag-node-sub">query + context docs</div>
+        </div>
+        <div style="flex:1;padding:0 16px;">
+          <div class="rag-context" id="rag-context">
+            <span class="rag-context-prompt">System: Answer based on the provided context only.<br><br>Context:<br></span>
+            [Federal Reserve 2023]: "Inflation rose due to supply chain disruptions and excess demand…"<br>
+            [Investopedia]: "Inflation is caused by demand-pull, cost-push, and built-in factors…"<br><br>
+            <span class="rag-context-prompt">User: What causes inflation?</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Generate -->
+      <div class="rag-lane" id="lane-7" style="padding-left:20px;">
+        <div class="rag-arrow" style="color:var(--amber); max-width:40px;"><div style="width:2px;height:28px;background:var(--amber);margin:auto;"></div></div>
+      </div>
+      <div class="rag-lane" id="lane-8">
+        <div class="rag-node" id="node-8" style="border-color:rgba(167,139,250,.3);">
+          <div class="rag-node-icon">🧠</div>
+          <div class="rag-node-label">LLM</div>
+          <div class="rag-node-name" style="color:var(--purple);">Generate Answer</div>
+          <div class="rag-node-sub">grounded in context</div>
+        </div>
+        <div style="flex:1;padding:0 16px;">
+          <div id="rag-output" style="display:none;font-family:var(--mono);font-size:12px;color:var(--muted);line-height:1.8;padding:12px;background:rgba(0,0,0,.25);border-radius:var(--r-md);border:1px solid var(--border);">
+            Based on the provided sources, inflation is primarily caused by:<br>
+            <span style="color:var(--green);">1. Demand-pull</span> — too much money chasing too few goods<br>
+            <span style="color:var(--cyan);">2. Cost-push</span> — rising production costs (supply chain, energy)<br>
+            <span style="color:var(--amber);">3. Built-in inflation</span> — wage-price spiral expectations<br>
+            <span style="color:var(--faint);font-size:10px;margin-top:6px;display:block;">Sources: Federal Reserve 2023, Investopedia</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="explain-panel">
+    <div class="explain-step" id="exp-step">What is RAG?</div>
+    <div class="explain-text" id="exp-text">Retrieval-Augmented Generation (RAG) grounds LLM responses in external knowledge. Instead of relying solely on training data, RAG retrieves relevant documents at query time and includes them as context. This reduces hallucinations and enables up-to-date answers.</div>
+    <div class="explain-tags" id="exp-tags"></div>
+  </div>
+</div><!-- ── Also by echobash strip ── -->
+<div class="also-strip">
+  <div class="also-inner">
+    <span class="also-label">also by echobash</span>
+    <div class="also-divider"></div>
+    <div class="also-links">
+      <a href="https://devdunia.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--cyan);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">devdunia</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">networking tools</span>
+      </a>
+      <a href="https://echobash.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--purple);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">echobash</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">portfolio</span>
+      </a>
+      <a href="https://promptflix.in" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--amber);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">promptflix</span><span class="also-link-tld">.in</span>
+        <span class="also-link-sub">prompt library</span>
+      </a>
+    </div>
+  </div>
+</div>
+<footer class="footer">
+  <p>built by echobash &nbsp;·&nbsp; <a href="https://devdunia.com" target="_blank" rel="noopener">devdunia.com</a> &nbsp;·&nbsp; <a href="https://echobash.com" target="_blank" rel="noopener">echobash.com</a> &nbsp;·&nbsp; <a href="https://promptflix.in" target="_blank" rel="noopener">promptflix.in</a></p>
+  <p style="margin-top:4px;">llm-kit is open source — AI tools for everyone</p>
+</footer>
+
+<script>
+var currentStep = 0;
+var maxSteps = 7;
+
+var SIM_DOCS = [
+  { name:'Fed Reserve 2023 Report', sim:0.94 },
+  { name:'Investopedia: Inflation Causes', sim:0.89 },
+  { name:'IMF Monetary Policy', sim:0.81 },
+  { name:'CPI Historical Data', sim:0.73 },
+  { name:'Supply Chain Study', sim:0.68 },
+];
+
+var STEPS_INFO = [
+  { step:'Step 1 — User Query', text:'The user submits a natural language query. Without RAG, the LLM would answer purely from memorized training data — potentially outdated or hallucinated. RAG starts by processing this query for retrieval.', tags:['USER INPUT','NATURAL LANGUAGE'] },
+  { step:'Step 2 — Query Embedding', text:'The query is passed through an embedding model (e.g. text-embedding-3-small) to produce a dense vector of 1536 dimensions. This vector captures the semantic meaning of the query in a high-dimensional space.', tags:['EMBEDDING','SEMANTIC SEARCH','VECTOR'] },
+  { step:'Step 3 — Vector Similarity Search', text:'The query vector is compared against all document vectors in the vector database using cosine similarity (or inner product). Approximate Nearest Neighbor (ANN) algorithms like HNSW make this fast even with millions of documents.', tags:['ANN','HNSW','COSINE SIMILARITY'] },
+  { step:'Step 4 — Document Retrieval', text:'The top-k most similar documents are retrieved (typically k=3-10). These are the documents whose embeddings are closest to the query embedding in vector space — they\'re the most semantically relevant chunks.', tags:['TOP-K','CHUNKING','DOCUMENT RETRIEVAL'] },
+  { step:'Step 5 — Prompt Augmentation', text:'The retrieved document chunks are injected into the prompt alongside the original query. A typical RAG prompt has: System instruction, Context from retrieved docs, Original user question. The LLM is instructed to answer based only on the context.', tags:['PROMPT ENGINEERING','CONTEXT INJECTION','GROUNDING'] },
+  { step:'Step 6 — LLM Generation', text:'The LLM generates an answer using the augmented prompt. Because the relevant facts are explicitly in the context, the model can produce accurate, grounded answers without needing to memorize every fact. Citations can also be generated.', tags:['GENERATION','GROUNDED','CITATIONS'] },
+  { step:'Step 7 — Grounded Response', text:'The final answer is grounded in the retrieved sources. This dramatically reduces hallucinations for knowledge-intensive tasks. Advanced RAG adds re-ranking, query expansion, and iterative retrieval for even better results.', tags:['RAG','ANTI-HALLUCINATION','CITATIONS','KNOWLEDGE BASE'] },
+];
+
+function reset() {
+  currentStep = 0;
+  document.getElementById('step-counter').textContent = 'Step 0 / ' + maxSteps;
+  document.getElementById('btn-step').disabled = false;
+  document.getElementById('stage-progress').textContent = 'Ready — click "step" to begin';
+
+  for (var i = 0; i <= 8; i++) {
+    var el = document.getElementById('lane-'+i);
+    if (el) { el.classList.remove('show'); }
+  }
+  document.getElementById('sim-scores').innerHTML = '';
+  document.getElementById('rag-docs').style.display = 'none';
+  for (var d = 0; d < 5; d++) {
+    var doc = document.getElementById('doc-'+d);
+    if (doc) { doc.classList.remove('retrieved','top'); }
+  }
+  document.getElementById('rag-context').classList.remove('show');
+  document.getElementById('rag-output').style.display = 'none';
+
+  document.getElementById('exp-step').textContent = 'What is RAG?';
+  document.getElementById('exp-text').textContent = 'Retrieval-Augmented Generation (RAG) grounds LLM responses in external knowledge. Instead of relying solely on training data, RAG retrieves relevant documents at query time and includes them as context. This reduces hallucinations and enables up-to-date answers.';
+  document.getElementById('exp-tags').innerHTML = '';
+}
+
+function showInfo(idx) {
+  var s = STEPS_INFO[idx];
+  document.getElementById('exp-step').textContent = s.step;
+  document.getElementById('exp-text').textContent = s.text;
+  document.getElementById('exp-tags').innerHTML = s.tags.map(function(t) {
+    return '<span class="tag tag-g">'+t+'</span>';
+  }).join('');
+}
+
+function step() {
+  if (currentStep >= maxSteps) return;
+
+  if (currentStep === 0) {
+    document.getElementById('lane-0').classList.add('show');
+  } else if (currentStep === 1) {
+    document.getElementById('lane-1').classList.add('show');
+    document.getElementById('lane-2').classList.add('show');
+  } else if (currentStep === 2) {
+    document.getElementById('lane-3').classList.add('show');
+    document.getElementById('lane-4').classList.add('show');
+    // Show similarity scores
+    var html = '';
+    SIM_DOCS.forEach(function(d) {
+      html += '<div class="sim-row"><div class="sim-doc">'+d.name+'</div><div class="sim-bar-wrap"><div class="sim-fill" style="width:0%" data-w="'+(d.sim*100)+'%"></div></div><div class="sim-pct">'+Math.round(d.sim*100)+'%</div></div>';
+    });
+    document.getElementById('sim-scores').innerHTML = html;
+    setTimeout(function() {
+      document.querySelectorAll('.sim-fill').forEach(function(el) { el.style.width = el.dataset.w; });
+    }, 100);
+  } else if (currentStep === 3) {
+    document.getElementById('rag-docs').style.display = 'flex';
+    document.getElementById('doc-0').classList.add('top');
+    document.getElementById('doc-1').classList.add('top');
+    document.getElementById('doc-2').classList.add('retrieved');
+    document.getElementById('doc-3').classList.add('retrieved');
+    document.getElementById('doc-4').classList.add('retrieved');
+  } else if (currentStep === 4) {
+    document.getElementById('lane-5').classList.add('show');
+    document.getElementById('lane-6').classList.add('show');
+  } else if (currentStep === 5) {
+    document.getElementById('rag-context').classList.add('show');
+  } else if (currentStep === 6) {
+    document.getElementById('lane-7').classList.add('show');
+    document.getElementById('lane-8').classList.add('show');
+    setTimeout(function() {
+      document.getElementById('rag-output').style.display = 'block';
+    }, 400);
+  }
+
+  showInfo(currentStep);
+  currentStep++;
+  document.getElementById('step-counter').textContent = 'Step ' + currentStep + ' / ' + maxSteps;
+  document.getElementById('stage-progress').textContent = STEPS_INFO[currentStep-1].step;
+
+  if (currentStep >= maxSteps) {
+    document.getElementById('btn-step').disabled = true;
+    document.getElementById('stage-progress').textContent = 'RAG pipeline complete ✓';
+  }
+}
+
+function playAll() {
+  reset();
+  var i = 0;
+  function next() { if (i < maxSteps) { step(); i++; setTimeout(next, 700); } }
+  setTimeout(next, 300);
+}
+
+reset();
+</script>
+<script>(function(){var c=document.getElementById('ai-canvas'),x=c.getContext('2d'),w,h,cols,drops;function r(){w=c.width=window.innerWidth;h=c.height=window.innerHeight;cols=Math.floor(w/16);drops=new Array(cols).fill(0).map(function(){return Math.floor(Math.random()*-60);});}r();window.addEventListener('resize',r);var f=0;function d(){f++;requestAnimationFrame(d);if(f%5!==0)return;x.fillStyle='rgba(6,1,15,0.1)';x.fillRect(0,0,w,h);x.font='12px JetBrains Mono,monospace';for(var i=0;i<cols;i++){x.fillStyle=Math.random()>.95?'rgba(74,222,128,0.22)':'rgba(74,222,128,0.04)';x.fillText(Math.random()>.5?'1':'0',i*16,drops[i]*16);if(drops[i]*16>h&&Math.random()>.975)drops[i]=0;else drops[i]++;}}requestAnimationFrame(d);})();</script>
+<script src="../js/main.js"></script>
+</body>
+</html>

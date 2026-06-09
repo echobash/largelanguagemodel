@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chain of Thought — llm-kit</title>
+  <link rel="stylesheet" href="../css/main.css" />
+  <style>
+    .cot-compare { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:16px 0; }
+    @media(max-width:620px){ .cot-compare{grid-template-columns:1fr;} }
+    .cot-box { background:var(--bg2); border:2px solid var(--border2); border-radius:var(--r-xl); padding:16px; font-family:var(--mono); }
+    .cot-box.no-cot { border-color:rgba(248,113,113,.3); }
+    .cot-box.with-cot { border-color:rgba(74,222,128,.3); }
+    .cot-label { font-size:10px; text-transform:uppercase; letter-spacing:.1em; margin-bottom:8px; }
+    .cot-prompt  { color:var(--cyan); font-size:12px; line-height:1.6; margin-bottom:10px; padding:8px 10px; background:rgba(56,189,248,.07); border-radius:var(--r-sm); }
+    .cot-think   { color:var(--amber); font-size:12px; line-height:1.6; margin-bottom:8px; }
+    .cot-answer  { font-size:13px; font-weight:700; padding:8px 12px; border-radius:var(--r-sm); }
+    .cot-box.no-cot .cot-answer  { background:rgba(248,113,113,.1); color:var(--red); }
+    .cot-box.with-cot .cot-answer { background:rgba(74,222,128,.1); color:var(--green); }
+
+    .think-step { display:flex; gap:12px; padding:12px; margin-bottom:8px; background:rgba(0,0,0,.25); border-radius:var(--r-lg); border-left:3px solid; opacity:0; transform:translateX(-8px); transition:all .35s; }
+    .think-step.show { opacity:1; transform:none; }
+    .think-num  { font-family:var(--mono); font-size:12px; font-weight:700; min-width:28px; }
+    .think-text { font-family:var(--mono); font-size:12px; color:var(--muted); line-height:1.6; }
+  </style>
+</head>
+<body>
+<canvas id="ai-canvas" style="opacity:.15;"></canvas>
+<div class="grid-bg"></div>
+<div class="blob blob-2" style="opacity:.25;"></div>
+<nav class="nav scrolled">
+  <a class="nav-brand" href="../index.html"><span class="nav-brand-name">llm-kit</span><span class="nav-brand-by">@echobash</span></a>
+  <ul class="nav-links">
+    <li><a href="../index.html">home</a></li>
+    <li><a href="prompt.html">prompts</a></li>
+    <li><a href="few-shot.html">few-shot</a></li>
+    <li><a href="cot.html" class="active">chain of thought</a></li>
+  </ul>
+</nav>
+<div class="tool-wrap">
+  <div class="tool-title">chain_of_thought</div>
+  <div class="tool-sub">// Making AI "show its work" — why thinking out loud gives better answers</div>
+
+  <div style="background:rgba(74,222,128,.06);border:1px solid rgba(74,222,128,.2);border-radius:var(--r-lg);padding:14px 18px;margin-bottom:24px;font-family:var(--mono);font-size:13px;color:var(--muted);line-height:1.7;">
+    💡 <strong style="color:var(--green);">The core idea:</strong> If you ask an AI "what is 27 × 33?" it might say "891" — wrong. But if you say "think step by step", it works through the multiplication and gets 891 correctly. Chain of Thought (CoT) is just prompting the AI to reason out loud before giving a final answer. Sounds simple. Works surprisingly well.
+  </div>
+
+  <div class="mode-tabs">
+    <button class="mode-tab active" id="tab-compare" onclick="setMode('compare')">Without vs With CoT</button>
+    <button class="mode-tab" id="tab-live" onclick="setMode('live')">Live Thinking Demo</button>
+    <button class="mode-tab" id="tab-variants" onclick="setMode('variants')">CoT Variants</button>
+  </div>
+
+  <div class="stage">
+    <div class="stage-bar">
+      <div class="stage-bar-left"><span class="wp wp-r"></span><span class="wp wp-y"></span><span class="wp wp-g"></span></div>
+      <span class="stage-progress" id="stage-progress">See the difference CoT makes</span>
+    </div>
+    <div class="stage-body" id="stage-body">
+
+      <div id="mode-compare">
+        <div id="cot-compare-content"></div>
+      </div>
+
+      <div id="mode-live" style="display:none;">
+        <div style="font-family:var(--mono);font-size:13px;color:var(--purple);margin-bottom:16px;">Problem: "If a shirt costs $15 and is 30% off, and you also have a $2 coupon, what is the final price?"</div>
+        <div class="ctrl-row">
+          <button class="step-btn" onclick="stepThink()">next thought →</button>
+          <button class="play-btn" onclick="playThink()">▶ think all</button>
+          <button class="reset-btn" onclick="resetThink()">↺ reset</button>
+          <span style="font-family:var(--mono);font-size:12px;color:var(--faint);" id="think-counter">0 / 5 thoughts</span>
+        </div>
+        <div id="think-steps"></div>
+      </div>
+
+      <div id="mode-variants" style="display:none;">
+        <div id="variants-content"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="explain-panel">
+    <div class="explain-step" id="exp-step">Why does Chain of Thought work?</div>
+    <div class="explain-text" id="exp-text">When an AI "thinks step by step", it's not actually thinking in a human sense. It's generating tokens that represent intermediate steps — and those tokens help the model access and use the right knowledge. It's like writing notes while solving a math problem: the act of writing helps you stay on track. Prompting "think step by step" gives AI a reasoning "scratch pad".</div>
+    <div class="explain-tags" id="exp-tags"><span class="tag tag-g">JUST ADD "think step by step"</span></div>
+  </div>
+</div><!-- ── Also by echobash strip ── -->
+<div class="also-strip">
+  <div class="also-inner">
+    <span class="also-label">also by echobash</span>
+    <div class="also-divider"></div>
+    <div class="also-links">
+      <a href="https://devdunia.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--cyan);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">devdunia</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">networking tools</span>
+      </a>
+      <a href="https://echobash.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--purple);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">echobash</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">portfolio</span>
+      </a>
+      <a href="https://promptflix.in" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--amber);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">promptflix</span><span class="also-link-tld">.in</span>
+        <span class="also-link-sub">prompt library</span>
+      </a>
+    </div>
+  </div>
+</div>
+<footer class="footer">
+  <p>built by echobash &nbsp;·&nbsp; <a href="https://devdunia.com" target="_blank" rel="noopener">devdunia.com</a> &nbsp;·&nbsp; <a href="https://echobash.com" target="_blank" rel="noopener">echobash.com</a> &nbsp;·&nbsp; <a href="https://promptflix.in" target="_blank" rel="noopener">promptflix.in</a></p>
+  <p style="margin-top:4px;">llm-kit is open source — AI tools for everyone</p>
+</footer>
+<script>
+var EXAMPLES = [
+  {
+    question:'A bat and a ball cost $1.10 total. The bat costs $1.00 more than the ball. How much does the ball cost?',
+    noCot: { answer:'$0.10 ❌', note:'Most people (and AI!) intuitively say $0.10. Wrong!' },
+    withCot: {
+      thinking:'Let ball = x. Bat = x + 1.00. Together: x + (x + 1.00) = 1.10. → 2x = 0.10. → x = $0.05.',
+      answer:'$0.05 ✓',
+      note:'Working through the algebra gives the correct answer.'
+    }
+  },
+  {
+    question:'There are 23 students. Each table seats 4 students. How many tables are needed?',
+    noCot: { answer:'5 tables ❌', note:'23 ÷ 4 = 5.75 → should round up!' },
+    withCot: {
+      thinking:'23 ÷ 4 = 5 remainder 3. Five tables seat 20 students. The remaining 3 need a 6th table.',
+      answer:'6 tables ✓',
+      note:'Step-by-step catches the ceiling division.'
+    }
+  }
+];
+
+function buildCompare() {
+  var html = '';
+  EXAMPLES.forEach(function(ex) {
+    html += '<div style="margin-bottom:20px;">';
+    html += '<div style="font-family:var(--mono);font-size:12px;color:var(--muted);margin-bottom:10px;padding:10px 14px;background:rgba(0,0,0,.25);border-radius:var(--r-md);border:1px solid var(--border);"><span style="color:var(--faint);">Question: </span>'+ex.question+'</div>';
+    html += '<div class="cot-compare">';
+    html += '<div class="cot-box no-cot"><div class="cot-label" style="color:var(--red);">❌ Without CoT</div>';
+    html += '<div class="cot-prompt">Prompt: "'+ex.question+'"</div>';
+    html += '<div style="font-family:var(--mono);font-size:11px;color:var(--faint);margin-bottom:6px;">AI just blurts an answer:</div>';
+    html += '<div class="cot-answer">'+ex.noCot.answer+'</div>';
+    html += '<div style="font-family:var(--mono);font-size:11px;color:var(--faint);margin-top:6px;">'+ex.noCot.note+'</div></div>';
+    html += '<div class="cot-box with-cot"><div class="cot-label" style="color:var(--green);">✅ With Chain of Thought</div>';
+    html += '<div class="cot-prompt">Prompt: "'+ex.question+' Let\'s think step by step."</div>';
+    html += '<div class="cot-think">💭 '+ex.withCot.thinking+'</div>';
+    html += '<div class="cot-answer">'+ex.withCot.answer+'</div>';
+    html += '<div style="font-family:var(--mono);font-size:11px;color:var(--faint);margin-top:6px;">'+ex.withCot.note+'</div></div>';
+    html += '</div></div>';
+  });
+  document.getElementById('cot-compare-content').innerHTML = html;
+}
+
+var THINK_STEPS = [
+  { num:'💭 1', text:'The shirt originally costs $15. There is a 30% discount. Let me calculate the discount amount first.', color:'var(--purple)' },
+  { num:'💭 2', text:'30% of $15 = 0.30 × $15 = $4.50. So the discount is $4.50.', color:'var(--cyan)' },
+  { num:'💭 3', text:'After the 30% discount, the price is $15 - $4.50 = $10.50.', color:'var(--green)' },
+  { num:'💭 4', text:'Now apply the $2 coupon: $10.50 - $2.00 = $8.50.', color:'var(--amber)' },
+  { num:'✅ Answer', text:'The final price is $8.50.', color:'var(--green)' },
+];
+var thinkStep = 0;
+
+function resetThink() { thinkStep = 0; document.getElementById('think-steps').innerHTML = ''; document.getElementById('think-counter').textContent = '0 / '+THINK_STEPS.length+' thoughts'; }
+function stepThink() {
+  if (thinkStep >= THINK_STEPS.length) return;
+  var s = THINK_STEPS[thinkStep];
+  var el = document.createElement('div');
+  el.className = 'think-step';
+  el.style.borderColor = s.color;
+  el.innerHTML = '<div class="think-num" style="color:'+s.color+';">'+s.num+'</div><div class="think-text">'+s.text+'</div>';
+  document.getElementById('think-steps').appendChild(el);
+  requestAnimationFrame(function() { el.classList.add('show'); });
+  thinkStep++;
+  document.getElementById('think-counter').textContent = thinkStep + ' / ' + THINK_STEPS.length + ' thoughts';
+}
+function playThink() { resetThink(); var i=0; function n(){if(i<THINK_STEPS.length){stepThink();i++;setTimeout(n,600);}} setTimeout(n,200); }
+
+var VARIANTS_DATA = [
+  { name:'Zero-Shot CoT', color:'var(--purple)', prompt:'"Solve this problem. Think step by step."', desc:'Just adding "think step by step" to any prompt. No examples needed. Works surprisingly well on math and logic.' },
+  { name:'Few-Shot CoT', color:'var(--cyan)', prompt:'Show 2-3 examples of full reasoning chains, then ask your question.', desc:'Give the AI examples showing how to think through similar problems. More reliable than zero-shot but requires writing examples.' },
+  { name:'Self-Consistency', color:'var(--green)', prompt:'Ask the same question 5+ times. Pick the most common answer.', desc:'Run CoT multiple times with temperature > 0. Different reasoning paths often reach the same correct answer. Majority vote wins.' },
+  { name:'Tree of Thought', color:'var(--amber)', prompt:'Explore multiple reasoning branches, evaluate each, pick best.', desc:'Instead of one chain, explore multiple approaches. Like considering different strategies before picking one. Better for complex planning.' },
+  { name:'ReAct', color:'var(--pink)', prompt:'"Think, then Act, then Observe, then Think again."', desc:'Combines chain of thought with tool use (search, code, APIs). The AI reasons about what action to take, takes it, observes the result, and reasons again.' },
+];
+
+function buildVariants() {
+  var html = '';
+  VARIANTS_DATA.forEach(function(v) {
+    html += '<div style="background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r-xl);padding:16px 20px;margin-bottom:12px;">';
+    html += '<div style="font-family:var(--mono);font-size:14px;font-weight:700;color:'+v.color+';margin-bottom:6px;">'+v.name+'</div>';
+    html += '<div style="font-family:var(--mono);font-size:12px;color:var(--muted);margin-bottom:8px;line-height:1.6;">'+v.desc+'</div>';
+    html += '<div style="font-family:var(--mono);font-size:11px;color:var(--faint);padding:8px 12px;background:rgba(0,0,0,.25);border-radius:var(--r-sm);border:1px solid var(--border);">Prompt pattern: '+v.prompt+'</div>';
+    html += '</div>';
+  });
+  document.getElementById('variants-content').innerHTML = html;
+}
+
+function setMode(m) {
+  ['compare','live','variants'].forEach(function(x) {
+    document.getElementById('mode-'+x).style.display = x===m ? '' : 'none';
+    document.getElementById('tab-'+x).classList.toggle('active', x===m);
+  });
+  if (m==='variants') buildVariants();
+  document.getElementById('stage-progress').textContent = m==='compare' ? 'See the difference CoT makes' : m==='live' ? 'Watch AI think step by step' : 'Chain of Thought variations';
+}
+
+buildCompare();
+</script>
+<script>(function(){var c=document.getElementById('ai-canvas'),x=c.getContext('2d'),w,h,cols,drops;function r(){w=c.width=window.innerWidth;h=c.height=window.innerHeight;cols=Math.floor(w/16);drops=new Array(cols).fill(0).map(function(){return Math.floor(Math.random()*-60);});}r();window.addEventListener('resize',r);var f=0;function d(){f++;requestAnimationFrame(d);if(f%5!==0)return;x.fillStyle='rgba(6,1,15,0.1)';x.fillRect(0,0,w,h);x.font='12px JetBrains Mono,monospace';for(var i=0;i<cols;i++){x.fillStyle=Math.random()>.96?'rgba(74,222,128,0.18)':'rgba(74,222,128,0.04)';x.fillText('💭',i*16,drops[i]*16);if(drops[i]*16>h&&Math.random()>.975)drops[i]=0;else drops[i]++;}}requestAnimationFrame(d);})();</script>
+<script src="../js/main.js"></script>
+</body>
+</html>

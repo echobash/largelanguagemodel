@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RLHF — llm-kit</title>
+  <link rel="stylesheet" href="../css/main.css" />
+  <style>
+    .phase-card { background:var(--bg2); border:2px solid var(--border2); border-radius:var(--r-xl); padding:20px 24px; margin-bottom:16px; opacity:0; transform:translateY(10px); transition:all .4s; }
+    .phase-card.show { opacity:1; transform:none; }
+    .phase-card.active { border-color:rgba(244,114,182,.4); }
+    .phase-num { font-family:var(--mono); font-size:11px; color:var(--faint); text-transform:uppercase; letter-spacing:.1em; margin-bottom:6px; }
+    .phase-title { font-family:var(--mono); font-size:18px; font-weight:700; margin-bottom:10px; }
+    .phase-desc { font-family:var(--mono); font-size:13px; color:var(--muted); line-height:1.7; }
+    .phase-visual { margin-top:14px; background:rgba(0,0,0,.25); border-radius:var(--r-lg); padding:14px; border:1px solid var(--border); font-family:var(--mono); font-size:12px; }
+
+    .human-pref { display:flex; gap:12px; margin:10px 0; }
+    .pref-box { flex:1; padding:12px; border-radius:var(--r-lg); border:2px solid var(--border2); font-family:var(--mono); font-size:12px; color:var(--muted); line-height:1.6; }
+    .pref-box.chosen { border-color:rgba(74,222,128,.5); background:rgba(74,222,128,.07); }
+    .pref-box.rejected { border-color:rgba(248,113,113,.4); background:rgba(248,113,113,.04); opacity:.7; }
+    .pref-label { font-size:10px; text-transform:uppercase; letter-spacing:.1em; margin-bottom:6px; }
+  </style>
+</head>
+<body>
+<canvas id="ai-canvas" style="opacity:.15;"></canvas>
+<div class="grid-bg"></div>
+<div class="blob blob-1" style="opacity:.25;"></div>
+<nav class="nav scrolled">
+  <a class="nav-brand" href="../index.html"><span class="nav-brand-name">llm-kit</span><span class="nav-brand-by">@echobash</span></a>
+  <ul class="nav-links">
+    <li><a href="../index.html">home</a></li>
+    <li><a href="training.html">training</a></li>
+    <li><a href="fine-tuning.html">fine-tuning</a></li>
+    <li><a href="rlhf.html" class="active">rlhf</a></li>
+  </ul>
+</nav>
+<div class="tool-wrap">
+  <div class="tool-title">rlhf_explained</div>
+  <div class="tool-sub">// How AI learns to be helpful, harmless, and honest from human feedback</div>
+
+  <div style="background:rgba(244,114,182,.06);border:1px solid rgba(244,114,182,.2);border-radius:var(--r-lg);padding:14px 18px;margin-bottom:24px;font-family:var(--mono);font-size:13px;color:var(--muted);line-height:1.7;">
+    💡 <strong style="color:var(--pink);">The core idea:</strong> A raw AI trained only on internet text can be rude, make up facts, or give harmful advice. RLHF (Reinforcement Learning from Human Feedback) is how companies like OpenAI and Anthropic "align" AI to be helpful and safe. Humans rate AI responses, those ratings train a "referee" AI, and then the main AI learns to get high referee scores.
+  </div>
+
+  <div class="ctrl-row">
+    <button class="step-btn" onclick="step()">step →</button>
+    <button class="play-btn" onclick="playAll()">▶ play all</button>
+    <button class="reset-btn" onclick="reset()">↺ reset</button>
+    <span style="font-family:var(--mono);font-size:12px;color:var(--faint);" id="step-counter">Step 0 / 4</span>
+  </div>
+
+  <div class="stage">
+    <div class="stage-bar">
+      <div class="stage-bar-left"><span class="wp wp-r"></span><span class="wp wp-y"></span><span class="wp wp-g"></span></div>
+      <span class="stage-progress" id="stage-progress">Ready — click "step" to begin</span>
+    </div>
+    <div class="stage-body" id="rlhf-steps"></div>
+  </div>
+
+  <div class="explain-panel">
+    <div class="explain-step" id="exp-step">What is RLHF?</div>
+    <div class="explain-text" id="exp-text">RLHF stands for Reinforcement Learning from Human Feedback. It's the secret sauce that turns a raw text predictor into a helpful assistant. ChatGPT, Claude, and Gemini all use some form of RLHF or a similar technique. Without it, AI would just complete text without caring if the answer is correct, helpful, or safe.</div>
+    <div class="explain-tags" id="exp-tags"></div>
+  </div>
+</div><!-- ── Also by echobash strip ── -->
+<div class="also-strip">
+  <div class="also-inner">
+    <span class="also-label">also by echobash</span>
+    <div class="also-divider"></div>
+    <div class="also-links">
+      <a href="https://devdunia.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--cyan);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">devdunia</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">networking tools</span>
+      </a>
+      <a href="https://echobash.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--purple);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">echobash</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">portfolio</span>
+      </a>
+      <a href="https://promptflix.in" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--amber);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">promptflix</span><span class="also-link-tld">.in</span>
+        <span class="also-link-sub">prompt library</span>
+      </a>
+    </div>
+  </div>
+</div>
+<footer class="footer">
+  <p>built by echobash &nbsp;·&nbsp; <a href="https://devdunia.com" target="_blank" rel="noopener">devdunia.com</a> &nbsp;·&nbsp; <a href="https://echobash.com" target="_blank" rel="noopener">echobash.com</a> &nbsp;·&nbsp; <a href="https://promptflix.in" target="_blank" rel="noopener">promptflix.in</a></p>
+  <p style="margin-top:4px;">llm-kit is open source — AI tools for everyone</p>
+</footer>
+<script>
+var currentStep = 0;
+
+var STEPS = [
+  {
+    num:'Phase 1 of 4', title:'Supervised Fine-Tuning (SFT)', color:'var(--purple)',
+    desc:'First, the raw pretrained model is fine-tuned on high-quality examples of ideal behavior. Human contractors write hundreds of thousands of example conversations: good questions with ideal AI answers. The AI learns to follow instructions and be helpful.',
+    visual: '<div style="color:var(--faint);margin-bottom:8px;">EXAMPLE TRAINING DATA (human-written ideal responses)</div>' +
+            '<div style="margin-bottom:6px;"><span style="color:var(--purple);">Human:</span> <span style="color:var(--muted);">What is the capital of France?</span></div>' +
+            '<div><span style="color:var(--green);">AI:</span> <span style="color:var(--muted);">The capital of France is Paris. It\'s the largest city in France and serves as the country\'s political, cultural, and economic center.</span></div>',
+    step:'Phase 1 — Supervised Fine-Tuning (SFT)',
+    text:'Imagine you hired a writer to show an AI hundreds of thousands of examples of "perfect" conversations. The AI trains on these like a student studying model answers. After SFT, the AI is already much more helpful, but it still doesn\'t have a good sense of which of its own answers are better than others.',
+    tags:['INSTRUCTION FOLLOWING','FINE-TUNING','HUMAN DEMONSTRATIONS']
+  },
+  {
+    num:'Phase 2 of 4', title:'Collect Human Preference Data', color:'var(--cyan)',
+    desc:'Now the SFT model generates multiple responses to the same question. Human raters read the responses and rank them: "Response A is better than Response B." This creates a massive dataset of human preferences — what does "good" actually mean.',
+    visual: '<div style="color:var(--faint);margin-bottom:8px;">HUMAN RATER COMPARES TWO RESPONSES</div>' +
+            '<div style="color:var(--cyan);margin-bottom:6px;">Question: "How do I stay motivated?"</div>' +
+            '<div class="human-pref">' +
+              '<div class="pref-box chosen"><div class="pref-label" style="color:var(--green);">✓ Response A (chosen)</div>Set small daily goals. Celebrate tiny wins. Track your progress visually. Remind yourself of your why.</div>' +
+              '<div class="pref-box rejected"><div class="pref-label" style="color:var(--red);">✗ Response B (rejected)</div>Motivation is a complex psychological phenomenon studied by researchers since the early 20th century...</div>' +
+            '</div>',
+    step:'Phase 2 — Human raters compare responses',
+    text:'Thousands of human workers compare AI responses and pick which one is better. This seems simple but it\'s very powerful — it captures what "helpfulness" actually means in practice. A technically correct answer that nobody understands is worse than a clear, practical one.',
+    tags:['PREFERENCE DATA','HUMAN RATERS','COMPARISON']
+  },
+  {
+    num:'Phase 3 of 4', title:'Train a Reward Model', color:'var(--amber)',
+    desc:'The human preference rankings are used to train a separate "reward model" — an AI that has learned to predict: "If a human saw this response, how good would they rate it?" This reward model becomes an automated substitute for human raters.',
+    visual: '<div style="color:var(--faint);margin-bottom:8px;">REWARD MODEL SCORES RESPONSES</div>' +
+            '<div style="margin-bottom:8px;padding:10px;background:rgba(74,222,128,.08);border-radius:6px;border:1px solid rgba(74,222,128,.2);">' +
+            '<span style="color:var(--green);">Reward: 8.4/10</span> — "Set small daily goals..." (helpful, practical, clear)</div>' +
+            '<div style="padding:10px;background:rgba(248,113,113,.06);border-radius:6px;border:1px solid rgba(248,113,113,.15);">' +
+            '<span style="color:var(--red);">Reward: 3.2/10</span> — "Motivation is a complex..." (verbose, unhelpful, academic)</div>',
+    step:'Phase 3 — Train a "referee" AI (reward model)',
+    text:'The reward model is like a trained judge. It learned from thousands of human comparisons and can now automatically score any AI response. Without this step, you\'d need a human to score every response during training — impossibly slow. The reward model makes automated training possible.',
+    tags:['REWARD MODEL','AUTOMATED SCORING','JUDGE AI']
+  },
+  {
+    num:'Phase 4 of 4', title:'Reinforce with PPO (the actual RL)', color:'var(--green)',
+    desc:'Now the main AI is trained to maximize reward model scores using Reinforcement Learning (specifically PPO algorithm). The AI generates responses, the reward model scores them, and the AI adjusts its weights to get higher scores. Repeat millions of times.',
+    visual: '<div style="color:var(--faint);margin-bottom:8px;">THE FEEDBACK LOOP</div>' +
+            '<div style="display:flex;flex-direction:column;gap:6px;font-size:12px;">' +
+            '<div style="padding:8px;border-radius:6px;background:rgba(167,139,250,.08);border:1px solid rgba(167,139,250,.2);">🧠 AI generates: "Set small daily goals..."</div>' +
+            '<div style="padding:8px;border-radius:6px;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.2);">⚖️ Reward model scores: 8.4/10 (good!)</div>' +
+            '<div style="padding:8px;border-radius:6px;background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.2);">✅ AI adjusts weights to repeat this behavior</div>' +
+            '<div style="padding:8px;border-radius:6px;background:rgba(56,189,248,.08);border:1px solid rgba(56,189,248,.2);">🔄 Repeat millions of times → aligned AI!</div>' +
+            '</div>',
+    step:'Phase 4 — Reinforcement Learning (PPO)',
+    text:'This is the "RL" in RLHF. The AI plays a game: generate a response, get a score from the reward model, adjust to score higher. After millions of rounds, the AI learns to consistently produce responses that humans rate highly. This is how ChatGPT learned to be so conversational and helpful.',
+    tags:['PPO','POLICY OPTIMIZATION','ALIGNMENT','RLHF']
+  }
+];
+
+function reset() {
+  currentStep = 0;
+  document.getElementById('step-counter').textContent = 'Step 0 / ' + STEPS.length;
+  document.getElementById('stage-progress').textContent = 'Ready — click "step" to begin';
+  document.getElementById('rlhf-steps').innerHTML = '';
+  document.getElementById('exp-step').textContent = 'What is RLHF?';
+  document.getElementById('exp-text').textContent = 'RLHF stands for Reinforcement Learning from Human Feedback. It\'s the secret sauce that turns a raw text predictor into a helpful assistant. ChatGPT, Claude, and Gemini all use some form of RLHF. Without it, AI would just complete text without caring if the answer is correct, helpful, or safe.';
+  document.getElementById('exp-tags').innerHTML = '';
+}
+
+function step() {
+  if (currentStep >= STEPS.length) return;
+  var s = STEPS[currentStep];
+
+  var el = document.createElement('div');
+  el.className = 'phase-card active';
+  el.innerHTML = '<div class="phase-num">'+s.num+'</div><div class="phase-title" style="color:'+s.color+';">'+s.title+'</div><div class="phase-desc">'+s.desc+'</div><div class="phase-visual">'+s.visual+'</div>';
+  document.querySelectorAll('.phase-card.active').forEach(function(c) { c.classList.remove('active'); });
+  document.getElementById('rlhf-steps').appendChild(el);
+  requestAnimationFrame(function() { el.classList.add('show'); });
+
+  document.getElementById('exp-step').textContent = s.step;
+  document.getElementById('exp-text').textContent = s.text;
+  document.getElementById('exp-tags').innerHTML = s.tags.map(function(t){return '<span class="tag tag-k">'+t+'</span>';}).join('');
+  document.getElementById('stage-progress').textContent = s.step;
+  currentStep++;
+  document.getElementById('step-counter').textContent = 'Step ' + currentStep + ' / ' + STEPS.length;
+  if (currentStep >= STEPS.length) document.getElementById('stage-progress').textContent = 'RLHF complete — AI is now aligned ✓';
+}
+
+function playAll() { reset(); var i=0; function n(){if(i<STEPS.length){step();i++;setTimeout(n,800);}} setTimeout(n,300); }
+reset();
+</script>
+<script>(function(){var c=document.getElementById('ai-canvas'),x=c.getContext('2d'),w,h,cols,drops;function r(){w=c.width=window.innerWidth;h=c.height=window.innerHeight;cols=Math.floor(w/16);drops=new Array(cols).fill(0).map(function(){return Math.floor(Math.random()*-60);});}r();window.addEventListener('resize',r);var f=0;function d(){f++;requestAnimationFrame(d);if(f%5!==0)return;x.fillStyle='rgba(6,1,15,0.1)';x.fillRect(0,0,w,h);x.font='12px JetBrains Mono,monospace';for(var i=0;i<cols;i++){x.fillStyle=Math.random()>.96?'rgba(244,114,182,0.2)':'rgba(244,114,182,0.04)';x.fillText('👍',i*16,drops[i]*16);if(drops[i]*16>h&&Math.random()>.975)drops[i]=0;else drops[i]++;}}requestAnimationFrame(d);})();</script>
+<script src="../js/main.js"></script>
+</body>
+</html>

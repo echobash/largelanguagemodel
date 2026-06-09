@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MCP — llm-kit</title>
+  <link rel="stylesheet" href="../css/main.css" />
+  <style>
+    .mcp-box { background:var(--bg2); border:1px solid var(--border2); border-radius:var(--r-xl); padding:16px 20px; margin-bottom:12px; font-family:var(--mono); }
+    .mcp-flow { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:12px 0; }
+    .mcp-node { padding:8px 14px; border-radius:var(--r-md); font-size:12px; font-weight:700; font-family:var(--mono); text-align:center; border:1px solid; flex-shrink:0; }
+    .mcp-arrow { color:var(--faint); font-size:18px; }
+    .mcp-vs { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:12px 0; }
+    @media(max-width:600px){ .mcp-vs{grid-template-columns:1fr;} }
+    .mcp-vs-card { background:var(--bg2); border:2px solid var(--border2); border-radius:var(--r-xl); padding:14px 16px; font-family:var(--mono); }
+
+    .server-card { background:var(--bg2); border:1px solid var(--border2); border-radius:var(--r-lg); padding:12px 16px; font-family:var(--mono); }
+    .server-name { font-size:13px; font-weight:700; margin-bottom:4px; }
+    .server-what  { font-size:11px; color:var(--muted); margin-bottom:6px; }
+    .server-tools { display:flex; flex-wrap:wrap; gap:4px; }
+    .server-tool  { font-size:10px; padding:2px 7px; border-radius:99px; background:rgba(167,139,250,.12); border:1px solid rgba(167,139,250,.2); color:var(--purple); }
+  </style>
+</head>
+<body>
+<canvas id="ai-canvas" style="opacity:.15;"></canvas>
+<div class="grid-bg"></div>
+<div class="blob blob-3" style="opacity:.25;"></div>
+<nav class="nav scrolled">
+  <a class="nav-brand" href="../index.html"><span class="nav-brand-name">llm-kit</span><span class="nav-brand-by">@echobash</span></a>
+  <ul class="nav-links">
+    <li><a href="../index.html">home</a></li>
+    <li><a href="agents.html">agents</a></li>
+    <li><a href="function-calling.html">function calling</a></li>
+    <li><a href="mcp.html" class="active">mcp</a></li>
+  </ul>
+</nav>
+<div class="tool-wrap">
+  <div class="tool-title">mcp</div>
+  <div class="tool-sub">// Model Context Protocol — the "USB standard" for connecting AI to tools</div>
+
+  <div style="background:rgba(167,139,250,.06);border:1px solid rgba(167,139,250,.25);border-radius:var(--r-lg);padding:14px 18px;margin-bottom:24px;font-family:var(--mono);font-size:13px;color:var(--muted);line-height:1.7;">
+    💡 <strong style="color:var(--purple);">The core idea:</strong> Before MCP, every AI app had to write custom code to connect to each tool (GitHub, Slack, files, databases). MCP is like USB — a single standard plug. Any AI that speaks MCP can use any MCP server. Write the tool once, use it with any AI. Created by Anthropic, now an open standard.
+  </div>
+
+  <div class="mode-tabs">
+    <button class="mode-tab active" id="tab-explain" onclick="setMode('explain')">What is MCP?</button>
+    <button class="mode-tab" id="tab-servers" onclick="setMode('servers')">MCP Servers</button>
+    <button class="mode-tab" id="tab-flow"    onclick="setMode('flow')">Request Flow</button>
+  </div>
+
+  <div class="stage">
+    <div class="stage-bar">
+      <div class="stage-bar-left"><span class="wp wp-r"></span><span class="wp wp-y"></span><span class="wp wp-g"></span></div>
+      <span class="stage-progress" id="stage-progress">Model Context Protocol explained</span>
+    </div>
+    <div class="stage-body" id="stage-body">
+
+      <div id="mode-explain">
+        <div class="mcp-vs">
+          <div class="mcp-vs-card" style="border-color:rgba(248,113,113,.3);">
+            <div style="font-size:12px;color:var(--red);font-weight:700;margin-bottom:10px;">❌ Without MCP — custom connectors</div>
+            <div style="font-size:11px;color:var(--muted);line-height:1.7;">
+              Claude ←custom code→ GitHub<br>
+              Claude ←custom code→ Slack<br>
+              Claude ←custom code→ Postgres<br>
+              GPT-4 ←custom code→ GitHub<br>
+              GPT-4 ←custom code→ Slack<br>
+              GPT-4 ←custom code→ Postgres<br>
+              <span style="color:var(--red);">= N models × M tools = huge mess</span>
+            </div>
+          </div>
+          <div class="mcp-vs-card" style="border-color:rgba(74,222,128,.3);">
+            <div style="font-size:12px;color:var(--green);font-weight:700;margin-bottom:10px;">✅ With MCP — one standard</div>
+            <div style="font-size:11px;color:var(--muted);line-height:1.7;">
+              <span style="color:var(--purple);">Claude (MCP client)</span><br>
+              &nbsp;&nbsp;↕ standard protocol<br>
+              MCP Server: GitHub tools<br>
+              MCP Server: Slack tools<br>
+              MCP Server: Postgres tools<br><br>
+              <span style="color:var(--green);">= Write server once, any AI uses it</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top:16px;">
+          <div style="font-family:var(--mono);font-size:12px;color:var(--faint);text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px;">WHAT MCP PROVIDES</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;">
+            <div class="mcp-box" style="border-color:rgba(167,139,250,.3);">
+              <div style="color:var(--purple);font-weight:700;font-size:12px;margin-bottom:4px;">Tools</div>
+              <div style="color:var(--muted);font-size:11px;">Functions the AI can call — search, write file, send message</div>
+            </div>
+            <div class="mcp-box" style="border-color:rgba(56,189,248,.3);">
+              <div style="color:var(--cyan);font-weight:700;font-size:12px;margin-bottom:4px;">Resources</div>
+              <div style="color:var(--muted);font-size:11px;">Data the AI can read — files, database rows, API responses</div>
+            </div>
+            <div class="mcp-box" style="border-color:rgba(251,191,36,.3);">
+              <div style="color:var(--amber);font-weight:700;font-size:12px;margin-bottom:4px;">Prompts</div>
+              <div style="color:var(--muted);font-size:11px;">Reusable templates the AI can use to do common tasks</div>
+            </div>
+            <div class="mcp-box" style="border-color:rgba(74,222,128,.3);">
+              <div style="color:var(--green);font-weight:700;font-size:12px;margin-bottom:4px;">Sampling</div>
+              <div style="color:var(--muted);font-size:11px;">Server can ask the AI to generate text mid-task</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="mode-servers" style="display:none;">
+        <div style="font-family:var(--mono);font-size:12px;color:var(--faint);margin-bottom:12px;">Popular MCP servers you can connect to Claude, Cursor, and other AI tools:</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;" id="servers-list"></div>
+      </div>
+
+      <div id="mode-flow" style="display:none;">
+        <div id="flow-steps"></div>
+        <div class="ctrl-row" style="margin-top:12px;">
+          <button class="step-btn" onclick="stepFlow()">step →</button>
+          <button class="play-btn" onclick="playFlow()">▶ play all</button>
+          <button class="reset-btn" onclick="resetFlow()">↺ reset</button>
+          <span style="font-family:var(--mono);font-size:12px;color:var(--faint);" id="flow-counter">0 / 6 steps</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="explain-panel">
+    <div class="explain-step" id="exp-step">MCP = USB for AI tools</div>
+    <div class="explain-text" id="exp-text">Before USB, every device needed its own connector. USB standardized the "plug" so any device works with any USB port. MCP does the same for AI: any AI that supports MCP can use any MCP server without custom integration code. Anthropic published the spec as open source — anyone can build MCP servers.</div>
+    <div class="explain-tags" id="exp-tags"><span class="tag tag-p">OPEN STANDARD BY ANTHROPIC</span><span class="tag tag-g">WORKS WITH CLAUDE, CURSOR, COPILOT</span></div>
+  </div>
+</div><!-- ── Also by echobash strip ── -->
+<div class="also-strip">
+  <div class="also-inner">
+    <span class="also-label">also by echobash</span>
+    <div class="also-divider"></div>
+    <div class="also-links">
+      <a href="https://devdunia.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--cyan);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">devdunia</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">networking tools</span>
+      </a>
+      <a href="https://echobash.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--purple);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">echobash</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">portfolio</span>
+      </a>
+      <a href="https://promptflix.in" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--amber);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">promptflix</span><span class="also-link-tld">.in</span>
+        <span class="also-link-sub">prompt library</span>
+      </a>
+    </div>
+  </div>
+</div>
+<footer class="footer">
+  <p>built by echobash &nbsp;·&nbsp; <a href="https://devdunia.com" target="_blank" rel="noopener">devdunia.com</a> &nbsp;·&nbsp; <a href="https://echobash.com" target="_blank" rel="noopener">echobash.com</a> &nbsp;·&nbsp; <a href="https://promptflix.in" target="_blank" rel="noopener">promptflix.in</a></p>
+  <p style="margin-top:4px;">llm-kit is open source — AI tools for everyone</p>
+</footer>
+<script>
+var SERVERS = [
+  { name:'GitHub', color:'var(--faint)', what:'Read/write code, issues, PRs', tools:['read_file','create_issue','search_code','create_pr'] },
+  { name:'Postgres', color:'var(--cyan)', what:'Read/write your database', tools:['query','list_tables','describe_table'] },
+  { name:'Filesystem', color:'var(--amber)', what:'Read/write local files and directories', tools:['read_file','write_file','list_dir','search'] },
+  { name:'Slack', color:'var(--green)', what:'Send/read messages and channels', tools:['send_message','list_channels','search_messages'] },
+  { name:'Brave Search', color:'var(--purple)', what:'Real-time web search results', tools:['web_search','news_search'] },
+  { name:'Puppeteer', color:'var(--pink)', what:'Control a web browser (browse, screenshot)', tools:['navigate','screenshot','click','type'] },
+  { name:'Google Drive', color:'var(--amber)', what:'Access Google Docs, Sheets, Drive files', tools:['read_doc','search_files','create_doc'] },
+  { name:'Memory', color:'var(--cyan)', what:'Persistent key-value memory across sessions', tools:['store','retrieve','list','delete'] },
+];
+
+var FLOW_DATA = [
+  { color:'var(--purple)', title:'Claude Desktop starts', desc:'When you launch Claude with an MCP server configured, Claude connects to the MCP server via a local socket (or HTTP). It asks: "What tools do you have?"' },
+  { color:'var(--cyan)',   title:'Server lists its tools', desc:'The MCP server responds with a list of available tools, resources, and prompts — each with a name, description, and parameter schema. Claude now knows what it can do.' },
+  { color:'var(--amber)',  title:'User sends a message', desc:'You ask Claude something that requires a tool. E.g. "Search GitHub for any open issues about login."' },
+  { color:'var(--green)',  title:'Claude calls the tool', desc:'Claude generates a structured MCP tool call: { tool: "search_code", params: { query: "login issues", repo: "..." } }. This goes to the MCP server.' },
+  { color:'var(--pink)',   title:'Server runs the action', desc:'The MCP server executes the actual code — makes the GitHub API call, runs the database query, reads the file, etc. Returns the result back to Claude.' },
+  { color:'var(--text)',   title:'Claude answers you', desc:'Claude reads the real data from the MCP server and incorporates it into a helpful, conversational response. You see the answer with real, current information.' },
+];
+
+var flowStep = 0;
+
+function resetFlow() { flowStep=0; document.getElementById('flow-steps').innerHTML=''; document.getElementById('flow-counter').textContent='0 / '+FLOW_DATA.length+' steps'; }
+function stepFlow() {
+  if (flowStep >= FLOW_DATA.length) return;
+  var f = FLOW_DATA[flowStep];
+  var div = document.createElement('div');
+  div.style.display = 'flex';
+  div.style.gap = '12px';
+  div.style.marginBottom = '10px';
+  div.style.opacity = '0';
+  div.style.transform = 'translateY(8px)';
+  div.style.transition = 'all .3s';
+  div.innerHTML = '<div style="flex:0 0 28px;height:28px;border-radius:50%;background:rgba(0,0,0,.4);border:2px solid '+f.color+';display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:12px;font-weight:700;color:'+f.color+';flex-shrink:0;">'+(flowStep+1)+'</div><div style="font-family:var(--mono);"><div style="font-size:13px;font-weight:700;color:'+f.color+';margin-bottom:3px;">'+f.title+'</div><div style="font-size:11px;color:var(--muted);line-height:1.6;">'+f.desc+'</div></div>';
+  document.getElementById('flow-steps').appendChild(div);
+  requestAnimationFrame(function() { div.style.opacity='1'; div.style.transform='none'; });
+  flowStep++;
+  document.getElementById('flow-counter').textContent = flowStep + ' / ' + FLOW_DATA.length + ' steps';
+}
+function playFlow() { resetFlow(); var i=0; function n(){if(i<FLOW_DATA.length){stepFlow();i++;setTimeout(n,600);}} setTimeout(n,200); }
+
+function buildServers() {
+  var html = '';
+  SERVERS.forEach(function(s) {
+    html += '<div class="server-card"><div class="server-name" style="color:'+s.color+';">'+s.name+'</div><div class="server-what">'+s.what+'</div><div class="server-tools">';
+    s.tools.forEach(function(t) { html += '<span class="server-tool">'+t+'</span>'; });
+    html += '</div></div>';
+  });
+  document.getElementById('servers-list').innerHTML = html;
+}
+
+function setMode(m) {
+  ['explain','servers','flow'].forEach(function(x) {
+    document.getElementById('mode-'+x).style.display = x===m?'':'none';
+    document.getElementById('tab-'+x).classList.toggle('active', x===m);
+  });
+  if (m==='servers') buildServers();
+  document.getElementById('stage-progress').textContent = m==='explain'?'Model Context Protocol explained':m==='servers'?'Available MCP servers':'How an MCP request flows';
+}
+</script>
+<script>(function(){var c=document.getElementById('ai-canvas'),x=c.getContext('2d'),w,h,cols,drops;function r(){w=c.width=window.innerWidth;h=c.height=window.innerHeight;cols=Math.floor(w/16);drops=new Array(cols).fill(0).map(function(){return Math.floor(Math.random()*-60);});}r();window.addEventListener('resize',r);var f=0;function d(){f++;requestAnimationFrame(d);if(f%5!==0)return;x.fillStyle='rgba(6,1,15,0.1)';x.fillRect(0,0,w,h);x.font='12px JetBrains Mono,monospace';for(var i=0;i<cols;i++){x.fillStyle=Math.random()>.96?'rgba(167,139,250,0.18)':'rgba(167,139,250,0.04)';x.fillText('⟷',i*16,drops[i]*16);if(drops[i]*16>h&&Math.random()>.975)drops[i]=0;else drops[i]++;}}requestAnimationFrame(d);})();</script>
+<script src="../js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Context Window — llm-kit</title>
+  <link rel="stylesheet" href="../css/main.css" />
+  <style>
+    .ctx-vis { position:relative; height:60px; border-radius:var(--r-lg); overflow:hidden; border:1px solid var(--border); margin:12px 0; display:flex; }
+    .ctx-seg { height:100%; display:flex; align-items:center; justify-content:center; font-family:var(--mono); font-size:11px; font-weight:700; transition:width .5s var(--ease); overflow:hidden; white-space:nowrap; }
+
+    .ctx-models { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:12px; margin:16px 0; }
+    .ctx-model-card { background:var(--bg2); border:1px solid var(--border2); border-radius:var(--r-lg); padding:14px; font-family:var(--mono); }
+    .ctx-model-name { font-size:13px; font-weight:700; margin-bottom:4px; }
+    .ctx-model-ctx  { font-size:12px; color:var(--purple); margin-bottom:4px; }
+    .ctx-model-what { font-size:11px; color:var(--muted); }
+
+    input[type=range] { accent-color:var(--purple); }
+  </style>
+</head>
+<body>
+<canvas id="ai-canvas" style="opacity:.15;"></canvas>
+<div class="grid-bg"></div>
+<div class="blob blob-2" style="opacity:.25;"></div>
+<nav class="nav scrolled">
+  <a class="nav-brand" href="../index.html"><span class="nav-brand-name">llm-kit</span><span class="nav-brand-by">@echobash</span></a>
+  <ul class="nav-links">
+    <li><a href="../index.html">home</a></li>
+    <li><a href="tokens.html">tokens</a></li>
+    <li><a href="kv-cache.html">kv cache</a></li>
+    <li><a href="context.html" class="active">context</a></li>
+  </ul>
+</nav>
+<div class="tool-wrap">
+  <div class="tool-title">context_window</div>
+  <div class="tool-sub">// How much text an AI can "see" at once — and why it matters</div>
+
+  <div style="background:rgba(56,189,248,.06);border:1px solid rgba(56,189,248,.2);border-radius:var(--r-lg);padding:14px 18px;margin-bottom:24px;font-family:var(--mono);font-size:13px;color:var(--muted);line-height:1.7;">
+    💡 <strong style="color:var(--cyan);">The core idea:</strong> The "context window" is the AI's working memory — everything it can currently see and use. Think of it like a whiteboard. If your conversation gets too long, old messages fall off the whiteboard (the AI forgets them). Context is measured in "tokens" — about ¾ of a word each.
+  </div>
+
+  <div class="mode-tabs">
+    <button class="mode-tab active" id="tab-vis"    onclick="setMode('vis')">Context Visualizer</button>
+    <button class="mode-tab" id="tab-models" onclick="setMode('models')">Model Comparison</button>
+    <button class="mode-tab" id="tab-tips"   onclick="setMode('tips')">Tips & Tricks</button>
+  </div>
+
+  <div class="stage">
+    <div class="stage-bar">
+      <div class="stage-bar-left"><span class="wp wp-r"></span><span class="wp wp-y"></span><span class="wp wp-g"></span></div>
+      <span class="stage-progress" id="stage-progress">See how context is allocated</span>
+    </div>
+    <div class="stage-body" id="stage-body">
+
+      <div id="mode-vis">
+        <div style="font-family:var(--mono);font-size:12px;color:var(--faint);margin-bottom:8px;">SELECT A MODEL</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+          <button class="mode-tab active" onclick="setModel('gpt4o', this)">GPT-4o (128K)</button>
+          <button class="mode-tab" onclick="setModel('claude', this)">Claude 3.7 (200K)</button>
+          <button class="mode-tab" onclick="setModel('gpt35', this)">GPT-3.5 (16K)</button>
+          <button class="mode-tab" onclick="setModel('llama', this)">Llama 3.1 (128K)</button>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;">
+          <div style="font-family:var(--mono);">
+            <div style="font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px;">System Prompt</div>
+            <input type="range" min="0" max="100" value="5" style="width:100%" oninput="updateCtx()">
+            <div style="font-size:13px;color:var(--purple);" id="sys-tokens">500 tokens</div>
+          </div>
+          <div style="font-family:var(--mono);">
+            <div style="font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px;">Conversation History</div>
+            <input type="range" min="0" max="100" value="30" style="width:100%" oninput="updateCtx()">
+            <div style="font-size:13px;color:var(--cyan);" id="hist-tokens">3,000 tokens</div>
+          </div>
+          <div style="font-family:var(--mono);">
+            <div style="font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px;">Your New Message</div>
+            <input type="range" min="0" max="100" value="5" style="width:100%" oninput="updateCtx()">
+            <div style="font-size:13px;color:var(--amber);" id="msg-tokens">500 tokens</div>
+          </div>
+        </div>
+
+        <div style="font-family:var(--mono);font-size:12px;color:var(--faint);margin-bottom:6px;">CONTEXT WINDOW ALLOCATION</div>
+        <div class="ctx-vis" id="ctx-vis"></div>
+
+        <div style="display:grid;grid-template-columns:repeat(4,auto);gap:12px;margin-top:8px;font-family:var(--mono);font-size:11px;">
+          <span><span style="display:inline-block;width:10px;height:10px;background:rgba(167,139,250,.7);border-radius:2px;margin-right:4px;vertical-align:middle;"></span>System</span>
+          <span><span style="display:inline-block;width:10px;height:10px;background:rgba(56,189,248,.7);border-radius:2px;margin-right:4px;vertical-align:middle;"></span>History</span>
+          <span><span style="display:inline-block;width:10px;height:10px;background:rgba(251,191,36,.7);border-radius:2px;margin-right:4px;vertical-align:middle;"></span>Your msg</span>
+          <span><span style="display:inline-block;width:10px;height:10px;background:rgba(255,255,255,.08);border-radius:2px;margin-right:4px;vertical-align:middle;"></span>Free</span>
+        </div>
+
+        <div id="ctx-info" style="margin-top:12px;font-family:var(--mono);font-size:12px;color:var(--muted);line-height:1.6;"></div>
+      </div>
+
+      <div id="mode-models" style="display:none;">
+        <div class="ctx-models" id="models-list"></div>
+      </div>
+
+      <div id="mode-tips" style="display:none;">
+        <div id="tips-content"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="explain-panel">
+    <div class="explain-step" id="exp-step">What is a context window?</div>
+    <div class="explain-text" id="exp-text">The context window is the maximum amount of text an AI can read at once — the full conversation, documents you share, and the system prompt all need to fit in this window. 1 token ≈ 4 characters ≈ ¾ of an English word. A 128K context window can hold about 100,000 words — roughly 400 pages of text.</div>
+    <div class="explain-tags" id="exp-tags"><span class="tag tag-c">1 TOKEN ≈ ¾ WORD</span><span class="tag tag-p">128K TOKENS ≈ 400 PAGES</span></div>
+  </div>
+</div><!-- ── Also by echobash strip ── -->
+<div class="also-strip">
+  <div class="also-inner">
+    <span class="also-label">also by echobash</span>
+    <div class="also-divider"></div>
+    <div class="also-links">
+      <a href="https://devdunia.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--cyan);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">devdunia</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">networking tools</span>
+      </a>
+      <a href="https://echobash.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--purple);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">echobash</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">portfolio</span>
+      </a>
+      <a href="https://promptflix.in" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--amber);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">promptflix</span><span class="also-link-tld">.in</span>
+        <span class="also-link-sub">prompt library</span>
+      </a>
+    </div>
+  </div>
+</div>
+<footer class="footer">
+  <p>built by echobash &nbsp;·&nbsp; <a href="https://devdunia.com" target="_blank" rel="noopener">devdunia.com</a> &nbsp;·&nbsp; <a href="https://echobash.com" target="_blank" rel="noopener">echobash.com</a> &nbsp;·&nbsp; <a href="https://promptflix.in" target="_blank" rel="noopener">promptflix.in</a></p>
+  <p style="margin-top:4px;">llm-kit is open source — AI tools for everyone</p>
+</footer>
+<script>
+var currentModel = { name:'gpt4o', ctx:128000 };
+var MODELS_DATA = [
+  { name:'GPT-4o', ctx:128000, maker:'OpenAI', note:'Best general purpose, vision+text, very smart', color:'var(--green)' },
+  { name:'Claude 3.7 Sonnet', ctx:200000, maker:'Anthropic', note:'Largest context, great for long documents', color:'var(--purple)' },
+  { name:'Gemini 1.5 Pro', ctx:1000000, maker:'Google', note:'Enormous context — 1M tokens (1000 pages!)', color:'var(--cyan)' },
+  { name:'GPT-3.5 Turbo', ctx:16000, maker:'OpenAI', note:'Fast, cheap, good for simple tasks', color:'var(--amber)' },
+  { name:'Llama 3.1 70B', ctx:128000, maker:'Meta (open)', note:'Open source, run locally or in cloud', color:'var(--green)' },
+  { name:'Mistral 7B', ctx:32000, maker:'Mistral (open)', note:'Small, fast, open source', color:'var(--faint)' },
+  { name:'Llama 3.2 1B', ctx:128000, maker:'Meta (mobile)', note:'Tiny model that fits on a phone', color:'var(--muted)' },
+  { name:'Gemini Flash 2.0', ctx:1000000, maker:'Google', note:'Fastest + massive context, low cost', color:'var(--cyan)' },
+];
+var TIPS_DATA = [
+  { tip:'Put important info at the start or end', why:'Models remember things at the start of context best, and the end second-best. Middle of very long contexts is often "forgotten". This is called the "lost in the middle" problem.' },
+  { tip:'Summarize long conversations', why:'If a conversation gets long, ask the AI to summarize the key points, then start a new chat with that summary. This "compresses" history and frees up context space.' },
+  { tip:'Don\'t paste unnecessary text', why:'Every token costs money and takes up space. Only include text that\'s actually relevant to your question. Pasting a 50-page PDF when you only need one section wastes most of the context.' },
+  { tip:'Use longer context for document analysis', why:'For tasks like "analyze this report" or "find inconsistencies in this contract", more context is better. Use Claude 3.7 (200K) or Gemini 1.5 (1M) for very long documents.' },
+  { tip:'Check token count before sending', why:'Most APIs show token counts. If you\'re near the limit, responses get cut off or the model starts forgetting early conversation. Tools like tiktoken can count tokens locally.' },
+];
+
+function setModel(m, btn) {
+  var models = { gpt4o:128000, claude:200000, gpt35:16000, llama:128000 };
+  currentModel = { name:m, ctx:models[m] };
+  document.querySelectorAll('.mode-tab').forEach(function(el) { el.classList.remove('active'); });
+  if (btn) btn.classList.add('active');
+  updateCtx();
+}
+
+function updateCtx() {
+  var sliders = document.querySelectorAll('input[type=range]');
+  var sys = Math.round(sliders[0].value / 100 * currentModel.ctx * 0.15);
+  var hist = Math.round(sliders[1].value / 100 * currentModel.ctx * 0.6);
+  var msg  = Math.round(sliders[2].value / 100 * currentModel.ctx * 0.15);
+  var free = currentModel.ctx - sys - hist - msg;
+  if (free < 0) { free = 0; }
+
+  document.getElementById('sys-tokens').textContent  = sys.toLocaleString() + ' tokens';
+  document.getElementById('hist-tokens').textContent = hist.toLocaleString() + ' tokens';
+  document.getElementById('msg-tokens').textContent  = msg.toLocaleString() + ' tokens';
+
+  var sysPct  = (sys  / currentModel.ctx * 100).toFixed(1);
+  var histPct = (hist / currentModel.ctx * 100).toFixed(1);
+  var msgPct  = (msg  / currentModel.ctx * 100).toFixed(1);
+  var freePct = Math.max(0, 100 - parseFloat(sysPct) - parseFloat(histPct) - parseFloat(msgPct));
+
+  document.getElementById('ctx-vis').innerHTML =
+    '<div class="ctx-seg" style="width:'+sysPct+'%;background:rgba(167,139,250,.55);">'+sysPct+'%</div>' +
+    '<div class="ctx-seg" style="width:'+histPct+'%;background:rgba(56,189,248,.45);">'+histPct+'%</div>' +
+    '<div class="ctx-seg" style="width:'+msgPct+'%;background:rgba(251,191,36,.45);">'+msgPct+'%</div>' +
+    '<div class="ctx-seg" style="width:'+freePct+'%;background:rgba(255,255,255,.05);">'+(freePct>5?Math.round(freePct)+'% free':'')+'</div>';
+
+  var usedTokens = sys + hist + msg;
+  var usedPct = (usedTokens / currentModel.ctx * 100).toFixed(0);
+  var approxWords = Math.round(usedTokens * 0.75).toLocaleString();
+  document.getElementById('ctx-info').innerHTML =
+    'Used: <span style="color:var(--amber);">' + usedTokens.toLocaleString() + ' tokens</span> (' + usedPct + '% of ' + currentModel.ctx.toLocaleString() + ') ≈ ' + approxWords + ' words' +
+    (free < 1000 ? '<br><span style="color:var(--red);">⚠️ Almost full! Responses may be cut short.</span>' : '<br><span style="color:var(--green);">✓ ' + free.toLocaleString() + ' tokens remaining (' + Math.round(free*0.75).toLocaleString() + ' words free)</span>');
+}
+
+function buildModels() {
+  var html = '';
+  MODELS_DATA.forEach(function(m) {
+    var pages = Math.round(m.ctx / 300);
+    html += '<div class="ctx-model-card"><div class="ctx-model-name" style="color:'+m.color+';">'+m.name+'</div><div style="font-size:10px;color:var(--faint);margin-bottom:4px;">by '+m.maker+'</div><div class="ctx-model-ctx">'+m.ctx.toLocaleString()+' tokens (~'+pages.toLocaleString()+' pages)</div><div class="ctx-model-what">'+m.note+'</div></div>';
+  });
+  document.getElementById('models-list').innerHTML = html;
+}
+
+function buildTips() {
+  var html = '';
+  TIPS_DATA.forEach(function(t, i) {
+    html += '<div style="display:flex;gap:12px;margin-bottom:14px;"><div style="flex:0 0 26px;height:26px;border-radius:50%;background:var(--purple-dim2);border:1px solid rgba(167,139,250,.3);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:12px;font-weight:700;color:var(--purple);">'+(i+1)+'</div>';
+    html += '<div><div style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px;">'+t.tip+'</div>';
+    html += '<div style="font-family:var(--mono);font-size:12px;color:var(--muted);line-height:1.6;">'+t.why+'</div></div></div>';
+  });
+  document.getElementById('tips-content').innerHTML = html;
+}
+
+function setMode(m) {
+  ['vis','models','tips'].forEach(function(x) {
+    document.getElementById('mode-'+x).style.display = x===m?'':'none';
+    document.getElementById('tab-'+x).classList.toggle('active', x===m);
+  });
+  if (m==='models') buildModels();
+  if (m==='tips') buildTips();
+}
+
+updateCtx();
+</script>
+<script>(function(){var c=document.getElementById('ai-canvas'),x=c.getContext('2d'),w,h,cols,drops;function r(){w=c.width=window.innerWidth;h=c.height=window.innerHeight;cols=Math.floor(w/16);drops=new Array(cols).fill(0).map(function(){return Math.floor(Math.random()*-60);});}r();window.addEventListener('resize',r);var f=0;function d(){f++;requestAnimationFrame(d);if(f%5!==0)return;x.fillStyle='rgba(6,1,15,0.1)';x.fillRect(0,0,w,h);x.font='12px JetBrains Mono,monospace';for(var i=0;i<cols;i++){x.fillStyle=Math.random()>.96?'rgba(56,189,248,0.18)':'rgba(56,189,248,0.04)';x.fillText('[',i*16,drops[i]*16);if(drops[i]*16>h&&Math.random()>.975)drops[i]=0;else drops[i]++;}}requestAnimationFrame(d);})();</script>
+<script src="../js/main.js"></script>
+</body>
+</html>

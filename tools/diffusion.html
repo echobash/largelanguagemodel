@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Diffusion Models — llm-kit</title>
+  <link rel="stylesheet" href="../css/main.css" />
+  <style>
+    canvas#diff-canvas { display:block; border-radius:var(--r-lg); background:#000; border:1px solid var(--border); max-width:100%; }
+    .diff-step { padding:12px 16px; border-radius:var(--r-lg); border-left:4px solid; margin-bottom:10px; font-family:var(--mono); opacity:0; transform:translateX(-10px); transition:all .4s; }
+    .diff-step.show { opacity:1; transform:none; }
+    .diff-label { font-size:13px; font-weight:700; margin-bottom:4px; }
+    .diff-desc  { font-size:12px; color:var(--muted); line-height:1.6; }
+    .diff-formula { font-size:11px; color:var(--faint); margin-top:6px; padding:6px 10px; background:rgba(0,0,0,.4); border-radius:var(--r-sm); font-family:var(--mono); }
+
+    .model-card { background:var(--bg2); border:1px solid var(--border2); border-radius:var(--r-xl); padding:16px; font-family:var(--mono); }
+    .model-name { font-size:14px; font-weight:700; margin-bottom:4px; }
+    .model-maker{ font-size:11px; color:var(--faint); margin-bottom:8px; }
+    .model-desc { font-size:12px; color:var(--muted); line-height:1.5; }
+    .model-tag  { display:inline-block; font-size:10px; padding:2px 7px; border-radius:99px; margin-right:4px; margin-top:6px; border:1px solid; }
+  </style>
+</head>
+<body>
+<canvas id="ai-canvas" style="opacity:.15;"></canvas>
+<div class="grid-bg"></div>
+<div class="blob blob-1" style="opacity:.25;"></div>
+<nav class="nav scrolled">
+  <a class="nav-brand" href="../index.html"><span class="nav-brand-name">llm-kit</span><span class="nav-brand-by">@echobash</span></a>
+  <ul class="nav-links">
+    <li><a href="../index.html">home</a></li>
+    <li><a href="multimodal.html">multimodal</a></li>
+    <li><a href="diffusion.html" class="active">diffusion</a></li>
+  </ul>
+</nav>
+<div class="tool-wrap">
+  <div class="tool-title">diffusion_models</div>
+  <div class="tool-sub">// How AI generates images — from random noise to a masterpiece</div>
+
+  <div style="background:rgba(251,191,36,.06);border:1px solid rgba(251,191,36,.2);border-radius:var(--r-lg);padding:14px 18px;margin-bottom:24px;font-family:var(--mono);font-size:13px;color:var(--muted);line-height:1.7;">
+    💡 <strong style="color:var(--amber);">The core idea:</strong> Start with a completely random TV-static image. Then, in ~20-50 small steps, remove the noise guided by your text prompt. Each step asks: "given this noise and the prompt 'cat on a beach', what small change would make this look slightly more like a cat on a beach?" After many steps, the static becomes the image. This is diffusion.
+  </div>
+
+  <div class="mode-tabs">
+    <button class="mode-tab active" id="tab-anim"   onclick="setMode('anim')">Noise → Image</button>
+    <button class="mode-tab" id="tab-how"    onclick="setMode('how')">How It Works</button>
+    <button class="mode-tab" id="tab-models" onclick="setMode('models')">Popular Models</button>
+  </div>
+
+  <div class="stage">
+    <div class="stage-bar">
+      <div class="stage-bar-left"><span class="wp wp-r"></span><span class="wp wp-y"></span><span class="wp wp-g"></span></div>
+      <span class="stage-progress" id="stage-progress">Watch noise become an image</span>
+    </div>
+    <div class="stage-body" id="stage-body">
+
+      <div id="mode-anim">
+        <div style="font-family:var(--mono);font-size:12px;color:var(--faint);margin-bottom:8px;">Prompt: <span style="color:var(--amber);">"a golden cat sitting on a beach at sunset"</span></div>
+        <canvas id="diff-canvas" width="400" height="200" style="width:100%;max-width:400px;"></canvas>
+        <div class="ctrl-row" style="margin-top:12px;">
+          <button class="play-btn" onclick="startDiff()">▶ generate</button>
+          <button class="reset-btn" onclick="resetDiff()">↺ reset to noise</button>
+          <span style="font-family:var(--mono);font-size:12px;color:var(--faint);" id="diff-step-label">Ready — click Generate</span>
+        </div>
+        <div id="diff-step-bar" style="margin-top:8px;height:6px;background:var(--bg3);border-radius:99px;overflow:hidden;">
+          <div id="diff-step-fill" style="height:100%;width:0%;background:linear-gradient(to right,rgba(251,191,36,.5),rgba(251,191,36,1));border-radius:99px;transition:width .2s;"></div>
+        </div>
+      </div>
+
+      <div id="mode-how" style="display:none;">
+        <div class="ctrl-row">
+          <button class="step-btn" onclick="stepHow()">step →</button>
+          <button class="play-btn" onclick="playHow()">▶ play all</button>
+          <button class="reset-btn" onclick="resetHow()">↺ reset</button>
+          <span style="font-family:var(--mono);font-size:12px;color:var(--faint);" id="how-counter">0 / 6 steps</span>
+        </div>
+        <div id="how-steps"></div>
+      </div>
+
+      <div id="mode-models" style="display:none;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;" id="models-grid"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="explain-panel">
+    <div class="explain-step" id="exp-step">Denoising Diffusion</div>
+    <div class="explain-text" id="exp-text">A diffusion model is trained by: (1) taking a real image, (2) adding random noise step by step until it's pure static, (3) training a neural net to predict and remove the noise at each step. After training, you can run the process backwards: start with noise and guide removal using a text prompt. The model learned how to "sculpt" images from noise.</div>
+    <div class="explain-tags" id="exp-tags"><span class="tag tag-a">20-50 DENOISING STEPS</span><span class="tag tag-p">GUIDED BY TEXT PROMPT</span><span class="tag tag-c">STABLE DIFFUSION / DALL-E / MIDJOURNEY</span></div>
+  </div>
+</div><!-- ── Also by echobash strip ── -->
+<div class="also-strip">
+  <div class="also-inner">
+    <span class="also-label">also by echobash</span>
+    <div class="also-divider"></div>
+    <div class="also-links">
+      <a href="https://devdunia.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--cyan);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">devdunia</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">networking tools</span>
+      </a>
+      <a href="https://echobash.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--purple);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">echobash</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">portfolio</span>
+      </a>
+      <a href="https://promptflix.in" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--amber);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">promptflix</span><span class="also-link-tld">.in</span>
+        <span class="also-link-sub">prompt library</span>
+      </a>
+    </div>
+  </div>
+</div>
+<footer class="footer">
+  <p>built by echobash &nbsp;·&nbsp; <a href="https://devdunia.com" target="_blank" rel="noopener">devdunia.com</a> &nbsp;·&nbsp; <a href="https://echobash.com" target="_blank" rel="noopener">echobash.com</a> &nbsp;·&nbsp; <a href="https://promptflix.in" target="_blank" rel="noopener">promptflix.in</a></p>
+  <p style="margin-top:4px;">llm-kit is open source — AI tools for everyone</p>
+</footer>
+<script>
+var dc = document.getElementById('diff-canvas');
+var dctx = dc.getContext('2d');
+var DW = dc.width, DH = dc.height;
+var diffTimer = null, diffStepN = 0, diffTotal = 40;
+
+// Color palettes for the "emerging image": golden sunset cat on beach
+var TARGETS = [];
+for (var ty=0; ty<DH; ty++) {
+  for (var tx=0; tx<DW; tx++) {
+    var nx = tx/DW, ny = ty/DH;
+    var r,g,b;
+    if (ny < 0.35) {
+      // sky: orange gradient
+      r = Math.round(240 - nx*40 + ny*50);
+      g = Math.round(120 + nx*30 - ny*20);
+      b = Math.round(60 + nx*20);
+    } else if (ny < 0.65) {
+      // sea
+      r = Math.round(70 + ny*30);
+      g = Math.round(130 + ny*20);
+      b = Math.round(180 - ny*40);
+    } else {
+      // beach/sand
+      r = Math.round(200 + Math.random()*20);
+      g = Math.round(170 + Math.random()*20);
+      b = Math.round(110 + Math.random()*20);
+    }
+    TARGETS.push([r,g,b]);
+  }
+}
+
+function drawNoise(progress) {
+  var img = dctx.createImageData(DW, DH);
+  var data = img.data;
+  for (var i=0; i<DW*DH; i++) {
+    var nr = Math.random()*255;
+    var ng = Math.random()*255;
+    var nb = Math.random()*255;
+    var t = TARGETS[i];
+    data[i*4]   = Math.round(nr * (1-progress) + t[0] * progress);
+    data[i*4+1] = Math.round(ng * (1-progress) + t[1] * progress);
+    data[i*4+2] = Math.round(nb * (1-progress) + t[2] * progress);
+    data[i*4+3] = 255;
+  }
+  dctx.putImageData(img, 0, 0);
+  // draw "cat" silhouette when progress > 0.5
+  if (progress > 0.5) {
+    var alpha = (progress - 0.5) * 2 * 0.7;
+    dctx.globalAlpha = alpha;
+    dctx.fillStyle = '#8B4513';
+    dctx.beginPath();
+    var cx = DW*0.5, cy = DH*0.45;
+    dctx.ellipse(cx, cy, 30*progress, 25*progress, 0, 0, Math.PI*2);
+    dctx.fill();
+    // head
+    dctx.beginPath();
+    dctx.ellipse(cx, cy-28*progress, 18*progress, 16*progress, 0, 0, Math.PI*2);
+    dctx.fill();
+    // ears
+    dctx.beginPath();
+    dctx.moveTo(cx-14*progress, cy-36*progress);
+    dctx.lineTo(cx-8*progress, cy-48*progress);
+    dctx.lineTo(cx-4*progress, cy-36*progress);
+    dctx.moveTo(cx+4*progress, cy-36*progress);
+    dctx.lineTo(cx+8*progress, cy-48*progress);
+    dctx.lineTo(cx+14*progress, cy-36*progress);
+    dctx.fillStyle = '#A0522D';
+    dctx.fill();
+    dctx.globalAlpha = 1;
+  }
+}
+
+function resetDiff() {
+  if (diffTimer) clearInterval(diffTimer);
+  diffStepN = 0;
+  drawNoise(0);
+  document.getElementById('diff-step-label').textContent = 'Ready — click Generate';
+  document.getElementById('diff-step-fill').style.width = '0%';
+}
+resetDiff();
+
+function startDiff() {
+  if (diffTimer) clearInterval(diffTimer);
+  diffStepN = 0;
+  diffTimer = setInterval(function() {
+    diffStepN++;
+    var progress = diffStepN / diffTotal;
+    drawNoise(progress);
+    document.getElementById('diff-step-fill').style.width = (progress*100) + '%';
+    document.getElementById('diff-step-label').textContent = 'Denoising step ' + diffStepN + ' / ' + diffTotal;
+    if (diffStepN >= diffTotal) {
+      clearInterval(diffTimer);
+      document.getElementById('diff-step-label').textContent = '✓ Image generated!';
+    }
+  }, 80);
+}
+
+var HOW_STEPS = [
+  { color:'var(--purple)', title:'Step 1 — Forward process (training)', desc:'Take a real photo of a cat on a beach. Add a tiny bit of random noise. Then a bit more. Then more, until after ~1000 steps it\'s pure static. The model learns to reverse this.' },
+  { color:'var(--cyan)',   title:'Step 2 — Text encoding', desc:'Your text prompt ("cat on a beach at sunset") is run through a text encoder (like CLIP). This produces a vector that represents the meaning of your prompt numerically.' },
+  { color:'var(--amber)',  title:'Step 3 — Start with noise', desc:'At generation time, start with a 512×512 grid of random numbers — pure visual static. This is your starting point.' },
+  { color:'var(--green)',  title:'Step 4 — U-Net predicts noise', desc:'A neural network (U-Net) looks at the noisy image AND the text encoding. It predicts: "here is the noise in this image, and here is what to remove to move toward the prompt." This happens ~20-50 times.' },
+  { color:'var(--pink)',   title:'Step 5 — Guidance scale', desc:'CFG (Classifier-Free Guidance) is a strength knob. High CFG = the image strongly matches the prompt but may look artificial. Low CFG = looser, more creative but may drift from prompt.' },
+  { color:'var(--text)',   title:'Step 6 — Final decode', desc:'Many modern models (Stable Diffusion) work in "latent space" — a compressed version of the image (64×64 instead of 512×512). After denoising, a VAE decoder upscales it to the final resolution.' },
+];
+
+var howStep = 0;
+function resetHow() { howStep=0; document.getElementById('how-steps').innerHTML=''; document.getElementById('how-counter').textContent='0 / '+HOW_STEPS.length+' steps'; }
+function stepHow() {
+  if (howStep >= HOW_STEPS.length) return;
+  var s = HOW_STEPS[howStep];
+  var el = document.createElement('div');
+  el.className = 'diff-step';
+  el.style.borderColor = s.color;
+  el.style.background = 'rgba(0,0,0,.2)';
+  el.innerHTML = '<div class="diff-label" style="color:'+s.color+';">'+s.title+'</div><div class="diff-desc">'+s.desc+'</div>';
+  document.getElementById('how-steps').appendChild(el);
+  requestAnimationFrame(function() { el.classList.add('show'); });
+  howStep++;
+  document.getElementById('how-counter').textContent = howStep + ' / ' + HOW_STEPS.length + ' steps';
+}
+function playHow() { resetHow(); var i=0; function n(){if(i<HOW_STEPS.length){stepHow();i++;setTimeout(n,600);}} setTimeout(n,200); }
+
+var MODELS_DATA = [
+  { name:'Stable Diffusion 3.5', maker:'Stability AI / Black Forest Labs', desc:'Open source, runs locally, most popular for art. Many fine-tuned versions (realistic photos, anime, concept art). Free to use.', tags:[{t:'Open Source',c:'rgba(74,222,128,.2)',tc:'var(--green)'},{t:'Runs Locally',c:'rgba(74,222,128,.2)',tc:'var(--green)'}] },
+  { name:'DALL-E 3', maker:'OpenAI', desc:'Best prompt understanding. Integrates directly into ChatGPT and API. Does not run locally — API only. Excellent for natural language prompts.', tags:[{t:'API Only',c:'rgba(56,189,248,.2)',tc:'var(--cyan)'},{t:'Best Text Understanding',c:'rgba(56,189,248,.2)',tc:'var(--cyan)'}] },
+  { name:'Midjourney v6', maker:'Midjourney', desc:'Known for beautiful artistic style, highly aesthetic outputs. Discord-based or website. Not open source. Best for creative/artistic images.', tags:[{t:'Best Aesthetics',c:'rgba(167,139,250,.2)',tc:'var(--purple)'},{t:'Subscription',c:'rgba(167,139,250,.2)',tc:'var(--purple)'}] },
+  { name:'Imagen 3', maker:'Google DeepMind', desc:'Google\'s state-of-the-art model. Extremely photorealistic, great text rendering in images (most models struggle with text). Available via Vertex AI.', tags:[{t:'Best Text in Images',c:'rgba(251,191,36,.2)',tc:'var(--amber)'},{t:'Google Cloud',c:'rgba(251,191,36,.2)',tc:'var(--amber)'}] },
+  { name:'Flux.1', maker:'Black Forest Labs', desc:'Latest generation, exceptional quality. Available in Pro/Dev/Schnell variants. Schnell is very fast. Open weights dev version.', tags:[{t:'State of Art',c:'rgba(248,113,113,.2)',tc:'var(--red)'},{t:'Fast',c:'rgba(248,113,113,.2)',tc:'var(--red)'}] },
+];
+
+function buildModels() {
+  var html = '';
+  MODELS_DATA.forEach(function(m) {
+    html += '<div class="model-card"><div class="model-name">'+m.name+'</div><div class="model-maker">by '+m.maker+'</div><div class="model-desc">'+m.desc+'</div>';
+    m.tags.forEach(function(t) { html += '<span class="model-tag" style="background:'+t.c+';border-color:'+t.c+';color:'+t.tc+';">'+t.t+'</span>'; });
+    html += '</div>';
+  });
+  document.getElementById('models-grid').innerHTML = html;
+}
+
+function setMode(m) {
+  ['anim','how','models'].forEach(function(x) {
+    document.getElementById('mode-'+x).style.display = x===m?'':'none';
+    document.getElementById('tab-'+x).classList.toggle('active', x===m);
+  });
+  if (m==='models') buildModels();
+  document.getElementById('stage-progress').textContent = m==='anim'?'Watch noise become an image':m==='how'?'Step-by-step diffusion process':'Popular image generation models';
+}
+</script>
+<script>(function(){var c=document.getElementById('ai-canvas'),x=c.getContext('2d'),w,h,cols,drops;function r(){w=c.width=window.innerWidth;h=c.height=window.innerHeight;cols=Math.floor(w/16);drops=new Array(cols).fill(0).map(function(){return Math.floor(Math.random()*-60);});}r();window.addEventListener('resize',r);var f=0;function d(){f++;requestAnimationFrame(d);if(f%5!==0)return;x.fillStyle='rgba(6,1,15,0.1)';x.fillRect(0,0,w,h);x.font='12px JetBrains Mono,monospace';for(var i=0;i<cols;i++){x.fillStyle=Math.random()>.96?'rgba(251,191,36,0.18)':'rgba(251,191,36,0.04)';x.fillText('░',i*16,drops[i]*16);if(drops[i]*16>h&&Math.random()>.975)drops[i]=0;else drops[i]++;}}requestAnimationFrame(d);})();</script>
+<script src="../js/main.js"></script>
+</body>
+</html>

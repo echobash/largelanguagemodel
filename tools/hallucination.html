@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hallucination — llm-kit</title>
+  <link rel="stylesheet" href="../css/main.css" />
+  <style>
+    .hal-example { background:var(--bg2); border:2px solid rgba(248,113,113,.3); border-radius:var(--r-xl); padding:18px 20px; margin-bottom:16px; font-family:var(--mono); }
+    .hal-q { color:var(--cyan); font-size:13px; margin-bottom:8px; }
+    .hal-a { color:var(--muted); font-size:12px; line-height:1.7; }
+    .hal-a .wrong { color:var(--red); text-decoration:underline wavy var(--red); }
+    .hal-why { margin-top:10px; padding:10px 12px; background:rgba(248,113,113,.06); border-radius:var(--r-md); border:1px solid rgba(248,113,113,.15); font-size:11px; color:var(--red); line-height:1.5; }
+
+    .fix-card { background:var(--bg2); border:1px solid rgba(74,222,128,.25); border-radius:var(--r-lg); padding:14px 16px; margin-bottom:10px; }
+    .fix-title { font-family:var(--mono); font-size:13px; font-weight:700; color:var(--green); margin-bottom:6px; }
+    .fix-desc  { font-family:var(--mono); font-size:12px; color:var(--muted); line-height:1.5; }
+
+    .prob-meter { margin:12px 0; }
+    .pm-label { font-family:var(--mono); font-size:11px; color:var(--faint); margin-bottom:4px; }
+    .pm-bar { height:8px; border-radius:99px; background:var(--bg3); overflow:hidden; }
+    .pm-fill { height:100%; border-radius:99px; }
+  </style>
+</head>
+<body>
+<canvas id="ai-canvas" style="opacity:.15;"></canvas>
+<div class="grid-bg"></div>
+<div class="blob blob-3" style="opacity:.25;"></div>
+<nav class="nav scrolled">
+  <a class="nav-brand" href="../index.html"><span class="nav-brand-name">llm-kit</span><span class="nav-brand-by">@echobash</span></a>
+  <ul class="nav-links">
+    <li><a href="../index.html">home</a></li>
+    <li><a href="llm.html">llm</a></li>
+    <li><a href="rag.html">rag (fix)</a></li>
+    <li><a href="hallucination.html" class="active">hallucination</a></li>
+  </ul>
+</nav>
+<div class="tool-wrap">
+  <div class="tool-title">hallucination</div>
+  <div class="tool-sub">// Why AI confidently says things that are completely wrong</div>
+
+  <div style="background:rgba(248,113,113,.06);border:1px solid rgba(248,113,113,.25);border-radius:var(--r-lg);padding:14px 18px;margin-bottom:24px;font-family:var(--mono);font-size:13px;color:var(--muted);line-height:1.7;">
+    💡 <strong style="color:var(--red);">The core idea:</strong> AI doesn't "know" facts the way humans do. It learned to produce text that sounds correct based on patterns in training data. When asked about something rare, niche, or outside its training, it doesn't say "I don't know" — it fills in plausible-sounding text that may be completely false. This is called hallucination.
+  </div>
+
+  <div class="mode-tabs">
+    <button class="mode-tab active" id="tab-examples" onclick="setMode('examples')">Real Hallucination Examples</button>
+    <button class="mode-tab" id="tab-why"  onclick="setMode('why')">Why It Happens</button>
+    <button class="mode-tab" id="tab-fix"  onclick="setMode('fix')">How to Prevent It</button>
+  </div>
+
+  <div class="stage">
+    <div class="stage-bar">
+      <div class="stage-bar-left"><span class="wp wp-r"></span><span class="wp wp-y"></span><span class="wp wp-g"></span></div>
+      <span class="stage-progress" id="stage-progress">Examples of AI hallucinations</span>
+    </div>
+    <div class="stage-body" id="stage-body">
+      <div id="mode-examples">
+        <div style="font-family:var(--mono);font-size:12px;color:var(--faint);margin-bottom:12px;">Underlined text = hallucinated (incorrect) information</div>
+        <div class="hal-example">
+          <div class="hal-q">Question: "Tell me about a paper by Dr. Zhang Wei on quantum computing from 2021"</div>
+          <div class="hal-a">In 2021, Dr. Zhang Wei published <span class="wrong">"Quantum Coherence in Neural Networks: A Theoretical Framework"</span> in <span class="wrong">Nature Physics</span>, demonstrating <span class="wrong">a 40% improvement in error correction</span>.</div>
+          <div class="hal-why">⚠️ This paper does not exist. The AI invented the title, journal, and finding. Asking about a specific niche topic with a non-famous name is a recipe for hallucination.</div>
+        </div>
+        <div class="hal-example">
+          <div class="hal-q">Question: "What court cases support my argument about X?" (asked in a legal brief)</div>
+          <div class="hal-a">Relevant precedents include <span class="wrong">Johnson v. Massachusetts (2019), 234 F.3d 891</span>, which established that... and <span class="wrong">Smith v. Google LLC (2022)</span>, which held...</div>
+          <div class="hal-why">⚠️ Famous real example: a lawyer submitted a brief with AI-generated fake case citations. None existed. The judge sanctioned the lawyer. Always verify legal citations from authoritative sources.</div>
+        </div>
+        <div class="hal-example">
+          <div class="hal-q">Question: "What are the side effects of combining Drug X and Drug Y?"</div>
+          <div class="hal-a">Combining these medications may cause <span class="wrong">serotonin syndrome in 23% of patients</span> according to a <span class="wrong">2020 FDA study</span>. The mechanism involves <span class="wrong">inhibition of the MAO-B pathway</span>...</div>
+          <div class="hal-why">⚠️ Medical hallucinations are dangerous. The statistics, study, and mechanism may all be fabricated. Always verify medical information with a licensed doctor and official sources.</div>
+        </div>
+        <div class="hal-example">
+          <div class="hal-q">Question: "What is the capital of Australia?" (basic fact, unlikely to hallucinate)</div>
+          <div class="hal-a" style="color:var(--green);">The capital of Australia is Canberra. ✓</div>
+          <div class="hal-why" style="background:rgba(74,222,128,.06);border-color:rgba(74,222,128,.2);color:var(--green);">✓ Well-known facts that appeared millions of times in training data are almost always correct. Hallucination risk is low for common knowledge.</div>
+        </div>
+      </div>
+      <div id="mode-why" style="display:none;">
+        <div id="why-content"></div>
+      </div>
+      <div id="mode-fix" style="display:none;">
+        <div id="fix-content"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="explain-panel">
+    <div class="explain-step" id="exp-step">Why AI Hallucinates</div>
+    <div class="explain-text" id="exp-text">An LLM is not a search engine or a database. It's a pattern-completion machine. When given a prompt, it produces whatever text fits the pattern most naturally — not whatever is true. For common, well-documented facts, the pattern usually aligns with truth. For rare, niche, or recent information, it fills in plausible-sounding text that may be completely fabricated.</div>
+    <div class="explain-tags" id="exp-tags"><span class="tag tag-r">HIGH RISK: niche facts, citations, recent events</span><span class="tag tag-g">LOW RISK: common knowledge, math</span></div>
+  </div>
+</div><!-- ── Also by echobash strip ── -->
+<div class="also-strip">
+  <div class="also-inner">
+    <span class="also-label">also by echobash</span>
+    <div class="also-divider"></div>
+    <div class="also-links">
+      <a href="https://devdunia.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--cyan);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">devdunia</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">networking tools</span>
+      </a>
+      <a href="https://echobash.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--purple);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">echobash</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">portfolio</span>
+      </a>
+      <a href="https://promptflix.in" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--amber);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">promptflix</span><span class="also-link-tld">.in</span>
+        <span class="also-link-sub">prompt library</span>
+      </a>
+    </div>
+  </div>
+</div>
+<footer class="footer">
+  <p>built by echobash &nbsp;·&nbsp; <a href="https://devdunia.com" target="_blank" rel="noopener">devdunia.com</a> &nbsp;·&nbsp; <a href="https://echobash.com" target="_blank" rel="noopener">echobash.com</a> &nbsp;·&nbsp; <a href="https://promptflix.in" target="_blank" rel="noopener">promptflix.in</a></p>
+  <p style="margin-top:4px;">llm-kit is open source — AI tools for everyone</p>
+</footer>
+<script>
+var WHY_ITEMS = [
+  { title:'AI doesn\'t "know" — it predicts', color:'var(--red)', desc:'The model never learned facts as facts. It learned: "after the phrase \'The capital of France is\', the word \'Paris\' appears." For common facts, the pattern holds. For niche facts, the model invents plausible-sounding completions.' },
+  { title:'Confidence doesn\'t equal correctness', color:'var(--amber)', desc:'The most confidently stated text is often the most problematic. AI outputs high-probability (confident-sounding) tokens regardless of their truth. A confident hallucination sounds exactly like a confident correct answer.' },
+  { title:'Training data gaps', color:'var(--purple)', desc:'If something wasn\'t in the training data (new events, private info, obscure research), the model can\'t know it. But it won\'t say "I don\'t know" — it interpolates between what it does know, creating plausible fabrications.' },
+  { title:'Compression and forgetting', color:'var(--cyan)', desc:'A model with billions of parameters "compresses" trillions of facts. Details get blurred, combined, or mixed up. A paper from Author A might get mixed with a topic from Author B — creating a non-existent work with a blend of details.' },
+  { title:'Long contexts', color:'var(--pink)', desc:'In very long conversations or documents, models can lose track of details stated earlier and begin contradicting or fabricating based on partial recall. Called "lost in the middle" problem.' },
+];
+
+var FIX_ITEMS = [
+  { title:'Use RAG — give AI the facts', desc:'Instead of asking AI to remember facts, give it the relevant documents and ask it to answer based on those. The AI reads the actual source and summarizes it. Hallucinations drop dramatically.' },
+  { title:'Ask for citations', desc:'Prompt: "Provide citations for every factual claim. If you cannot cite it, say so." This forces the AI to flag uncertain claims. Then verify the citations yourself.' },
+  { title:'Avoid asking for niche, recent, or specific facts', desc:'Don\'t ask AI: "What did person X say at conference Y on date Z?" Do ask: "Explain concept X" (general knowledge). Hallucination risk is inversely proportional to how common the information is.' },
+  { title:'"If you don\'t know, say so"', desc:'Add to your system prompt: "If you are uncertain about any fact, say \'I\'m not certain about this\'. Never fabricate citations, statistics, or quotes." Good models follow this instruction well.' },
+  { title:'Use tools (web search)', desc:'Models with web search access (ChatGPT with browsing, Perplexity, Claude with web access) can retrieve current facts instead of hallucinating them. For factual queries, use tools.' },
+  { title:'Verify independently', desc:'For anything important — medical, legal, financial, academic — always verify with authoritative sources. Treat AI as a helpful starting point, not a source of ground truth.' },
+];
+
+function buildWhy() {
+  var html = '';
+  WHY_ITEMS.forEach(function(w) {
+    html += '<div style="display:flex;gap:14px;margin-bottom:14px;align-items:flex-start;">';
+    html += '<div style="flex:0 0 12px;margin-top:6px;width:12px;height:12px;border-radius:50%;background:'+w.color+';flex-shrink:0;"></div>';
+    html += '<div><div style="font-family:var(--mono);font-size:13px;font-weight:700;color:'+w.color+';margin-bottom:4px;">'+w.title+'</div>';
+    html += '<div style="font-family:var(--mono);font-size:12px;color:var(--muted);line-height:1.6;">'+w.desc+'</div></div>';
+    html += '</div>';
+  });
+
+  // Hallucination risk meter
+  var risks = [{label:'Named people (non-famous)',pct:75},{label:'Specific statistics/numbers',pct:65},{label:'Recent events (last 6mo)',pct:60},{label:'Academic papers/citations',pct:70},{label:'Common knowledge facts',pct:8},{label:'Basic math/logic',pct:15}];
+  html += '<div style="margin-top:20px;font-family:var(--mono);font-size:12px;color:var(--faint);margin-bottom:10px;text-transform:uppercase;letter-spacing:.1em;">HALLUCINATION RISK BY TOPIC</div>';
+  risks.forEach(function(r) {
+    html += '<div class="prob-meter"><div class="pm-label">'+r.label+' — '+r.pct+'% estimated risk</div>';
+    html += '<div class="pm-bar"><div class="pm-fill" style="width:'+r.pct+'%;background:'+(r.pct>50?'rgba(248,113,113,.7)':r.pct>25?'rgba(251,191,36,.7)':'rgba(74,222,128,.7)')+'"></div></div></div>';
+  });
+  document.getElementById('why-content').innerHTML = html;
+}
+
+function buildFix() {
+  var html = '';
+  FIX_ITEMS.forEach(function(f, i) {
+    html += '<div class="fix-card"><div class="fix-title">'+(i+1)+'. '+f.title+'</div><div class="fix-desc">'+f.desc+'</div></div>';
+  });
+  document.getElementById('fix-content').innerHTML = html;
+}
+
+function setMode(m) {
+  ['examples','why','fix'].forEach(function(x) {
+    document.getElementById('mode-'+x).style.display = x===m?'':'none';
+    document.getElementById('tab-'+x).classList.toggle('active', x===m);
+  });
+  if (m==='why') buildWhy();
+  if (m==='fix') buildFix();
+  document.getElementById('stage-progress').textContent = m==='examples' ? 'Examples of AI hallucinations' : m==='why' ? 'Why hallucinations happen' : 'How to prevent hallucinations';
+}
+</script>
+<script>(function(){var c=document.getElementById('ai-canvas'),x=c.getContext('2d'),w,h,cols,drops;function r(){w=c.width=window.innerWidth;h=c.height=window.innerHeight;cols=Math.floor(w/16);drops=new Array(cols).fill(0).map(function(){return Math.floor(Math.random()*-60);});}r();window.addEventListener('resize',r);var f=0;function d(){f++;requestAnimationFrame(d);if(f%5!==0)return;x.fillStyle='rgba(6,1,15,0.1)';x.fillRect(0,0,w,h);x.font='12px JetBrains Mono,monospace';for(var i=0;i<cols;i++){x.fillStyle=Math.random()>.96?'rgba(248,113,113,0.18)':'rgba(248,113,113,0.04)';x.fillText('?',i*16,drops[i]*16);if(drops[i]*16>h&&Math.random()>.975)drops[i]=0;else drops[i]++;}}requestAnimationFrame(d);})();</script>
+<script src="../js/main.js"></script>
+</body>
+</html>

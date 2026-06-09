@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>System Prompts — llm-kit</title>
+  <link rel="stylesheet" href="../css/main.css" />
+  <style>
+    .sys-editor { background:rgba(0,0,0,.4); border:1px solid rgba(167,139,250,.3); border-radius:var(--r-lg); padding:16px; font-family:var(--mono); font-size:12px; color:var(--text); line-height:1.7; white-space:pre-wrap; position:relative; }
+    .sys-section { cursor:pointer; border-radius:var(--r-sm); padding:2px 4px; transition:background .2s; }
+    .sys-section:hover { background:rgba(255,255,255,.08); }
+    .sys-section.active { background:rgba(167,139,250,.2); }
+
+    .anatomy-panel { background:var(--bg2); border:1px solid var(--border2); border-radius:var(--r-xl); padding:14px 16px; margin-top:10px; font-family:var(--mono); font-size:12px; }
+    .anatomy-title { font-size:13px; font-weight:700; margin-bottom:6px; }
+    .anatomy-desc  { color:var(--muted); line-height:1.5; }
+
+    .real-example { background:var(--bg2); border:1px solid var(--border2); border-radius:var(--r-xl); padding:16px 18px; margin-bottom:10px; font-family:var(--mono); }
+    .re-label  { font-size:10px; text-transform:uppercase; letter-spacing:.1em; color:var(--faint); margin-bottom:6px; }
+    .re-sys    { font-size:11px; color:var(--purple); line-height:1.6; padding:8px 12px; background:rgba(167,139,250,.06); border-radius:var(--r-sm); border-left:3px solid var(--purple); margin-bottom:6px; }
+    .re-effect { font-size:11px; color:var(--green); padding:6px 10px; background:rgba(74,222,128,.06); border-radius:var(--r-sm); }
+  </style>
+</head>
+<body>
+<canvas id="ai-canvas" style="opacity:.15;"></canvas>
+<div class="grid-bg"></div>
+<div class="blob blob-1" style="opacity:.25;"></div>
+<nav class="nav scrolled">
+  <a class="nav-brand" href="../index.html"><span class="nav-brand-name">llm-kit</span><span class="nav-brand-by">@echobash</span></a>
+  <ul class="nav-links">
+    <li><a href="../index.html">home</a></li>
+    <li><a href="prompt.html">prompts</a></li>
+    <li><a href="few-shot.html">few-shot</a></li>
+    <li><a href="system-prompt.html" class="active">system prompt</a></li>
+  </ul>
+</nav>
+<div class="tool-wrap">
+  <div class="tool-title">system_prompt</div>
+  <div class="tool-sub">// The hidden instructions that shape every conversation before you even say hello</div>
+
+  <div style="background:rgba(167,139,250,.06);border:1px solid rgba(167,139,250,.25);border-radius:var(--r-lg);padding:14px 18px;margin-bottom:24px;font-family:var(--mono);font-size:13px;color:var(--muted);line-height:1.7;">
+    💡 <strong style="color:var(--purple);">The core idea:</strong> Before you type anything, the app developer has already sent a secret set of instructions to the AI — the system prompt. ChatGPT, Claude.ai, and every AI product use one. It tells the AI: who it is, what it can/can't do, what tone to use, and what to focus on. You can write your own when using the API.
+  </div>
+
+  <div class="mode-tabs">
+    <button class="mode-tab active" id="tab-anatomy" onclick="setMode('anatomy')">Anatomy</button>
+    <button class="mode-tab" id="tab-real"    onclick="setMode('real')">Real Examples</button>
+    <button class="mode-tab" id="tab-builder" onclick="setMode('builder')">Quick Builder</button>
+  </div>
+
+  <div class="stage">
+    <div class="stage-bar">
+      <div class="stage-bar-left"><span class="wp wp-r"></span><span class="wp wp-y"></span><span class="wp wp-g"></span></div>
+      <span class="stage-progress" id="stage-progress">Click any section of the system prompt to learn what it does</span>
+    </div>
+    <div class="stage-body" id="stage-body">
+
+      <div id="mode-anatomy">
+        <div style="font-family:var(--mono);font-size:12px;color:var(--faint);margin-bottom:8px;">Click any highlighted section to learn what it does:</div>
+        <div class="sys-editor" id="sys-editor">
+<span class="sys-section" data-key="role" onclick="showSection('role')"><span style="color:rgba(167,139,250,.6);">// ROLE</span>
+You are <span style="color:var(--purple);font-weight:700;">Aria</span>, a customer support agent for <span style="color:var(--purple);font-weight:700;">TechFlow</span> — a SaaS project management tool.</span>
+
+<span class="sys-section" data-key="task" onclick="showSection('task')"><span style="color:rgba(56,189,248,.6);">// TASK</span>
+Your job is to help users with:
+- Account and billing questions
+- Understanding product features
+- Troubleshooting common issues</span>
+
+<span class="sys-section" data-key="tone" onclick="showSection('tone')"><span style="color:rgba(74,222,128,.6);">// TONE</span>
+Be friendly, concise, and professional. Use simple language.
+Avoid technical jargon unless the user uses it first.</span>
+
+<span class="sys-section" data-key="limits" onclick="showSection('limits')"><span style="color:rgba(248,113,113,.6);">// LIMITS</span>
+Do NOT discuss competitor products.
+Do NOT handle refunds — direct to billing@techflow.com.
+If you don't know the answer, say "Let me check on that".</span>
+
+<span class="sys-section" data-key="context" onclick="showSection('context')"><span style="color:rgba(251,191,36,.6);">// CONTEXT</span>
+Today is {{date}}. User plan: {{user.plan}}.
+Recent issues: {{recent_tickets}}.</span></div>
+
+        <div id="anatomy-panel" class="anatomy-panel" style="display:none;"></div>
+      </div>
+
+      <div id="mode-real" style="display:none;">
+        <div id="real-content"></div>
+      </div>
+
+      <div id="mode-builder" style="display:none;">
+        <div id="builder-content"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="explain-panel">
+    <div class="explain-step" id="exp-step">System prompt vs user message</div>
+    <div class="explain-text" id="exp-text">The conversation has 3 roles: system (developer instructions), user (what you type), assistant (AI response). System messages are processed first, set the AI's personality and constraints, and are never visible to end users. They persist throughout the entire conversation. You can think of them as the "briefing" the AI gets before meeting you.</div>
+    <div class="explain-tags" id="exp-tags"><span class="tag tag-p">INVISIBLE TO END USERS</span><span class="tag tag-c">PERSISTS WHOLE CONVERSATION</span><span class="tag tag-g">MOST POWERFUL WAY TO CUSTOMIZE AI</span></div>
+  </div>
+</div><!-- ── Also by echobash strip ── -->
+<div class="also-strip">
+  <div class="also-inner">
+    <span class="also-label">also by echobash</span>
+    <div class="also-divider"></div>
+    <div class="also-links">
+      <a href="https://devdunia.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--cyan);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">devdunia</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">networking tools</span>
+      </a>
+      <a href="https://echobash.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--purple);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">echobash</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">portfolio</span>
+      </a>
+      <a href="https://promptflix.in" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--amber);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">promptflix</span><span class="also-link-tld">.in</span>
+        <span class="also-link-sub">prompt library</span>
+      </a>
+    </div>
+  </div>
+</div>
+<footer class="footer">
+  <p>built by echobash &nbsp;·&nbsp; <a href="https://devdunia.com" target="_blank" rel="noopener">devdunia.com</a> &nbsp;·&nbsp; <a href="https://echobash.com" target="_blank" rel="noopener">echobash.com</a> &nbsp;·&nbsp; <a href="https://promptflix.in" target="_blank" rel="noopener">promptflix.in</a></p>
+  <p style="margin-top:4px;">llm-kit is open source — AI tools for everyone</p>
+</footer>
+<script>
+var SECTIONS = {
+  role: { color:'var(--purple)', title:'Role / Identity', desc:'Tell the AI who it is. A name, a role, and a context. This shapes the AI\'s entire persona. "You are Aria, a support agent for TechFlow" is much more effective than leaving the AI as generic Claude/ChatGPT. The AI will stay in character throughout.' },
+  task: { color:'var(--cyan)', title:'Task / Scope', desc:'Tell the AI exactly what topics and tasks it should focus on. Like a job description. This prevents the AI from going off-topic. If you run a cooking assistant, listing "recipes, ingredient substitutions, cooking techniques" keeps it on track.' },
+  tone: { color:'var(--green)', title:'Tone / Style', desc:'Tell the AI how to communicate. Formal or casual? Technical or simple? Bullet points or paragraphs? Emojis or not? This is where brand voice lives. Without this, the AI defaults to generic helpful-assistant mode.' },
+  limits: { color:'var(--red)', title:'Constraints / Guardrails', desc:'Tell the AI what NOT to do. "Never mention competitors", "Don\'t make price commitments", "If asked about refunds, direct to billing@...". These hard rules prevent embarrassing mistakes and keep the AI in its lane.' },
+  context: { color:'var(--amber)', title:'Dynamic Context / Variables', desc:'Inject real-time data using template variables. {{date}}, {{user.plan}}, {{recent_tickets}} get filled in with actual values before the prompt is sent. This personalizes every conversation without writing a different system prompt for each user.' },
+};
+
+function showSection(key) {
+  document.querySelectorAll('.sys-section').forEach(function(el) { el.classList.remove('active'); });
+  document.querySelector('[data-key="'+key+'"]').classList.add('active');
+  var s = SECTIONS[key];
+  var p = document.getElementById('anatomy-panel');
+  p.style.display = '';
+  p.innerHTML = '<div class="anatomy-title" style="color:'+s.color+';">'+s.title+'</div><div class="anatomy-desc">'+s.desc+'</div>';
+}
+
+var REAL_EXAMPLES = [
+  {
+    label:'Customer support bot',
+    sys:'You are a helpful support agent for TechFlow. Be concise and friendly. Do not discuss pricing; direct pricing questions to sales@techflow.com. If you cannot help, say "I\'ll escalate this to a human agent."',
+    effect:'Creates a constrained, branded support experience. Users feel they\'re talking to a company rep, not a generic AI.'
+  },
+  {
+    label:'Code reviewer',
+    sys:'You are a senior Python engineer conducting a code review. Focus on: (1) correctness, (2) edge cases, (3) performance. Format your response as bullet points grouped by severity: Critical, Warning, Suggestion. Do not rewrite the code unless asked.',
+    effect:'Precise review format every time. Severity grouping makes it actionable. "Don\'t rewrite unless asked" prevents unwanted refactors.'
+  },
+  {
+    label:'Language tutor',
+    sys:'You are a Spanish language tutor. Respond to the user in Spanish, but if they make a grammar mistake, gently correct them in English, explain the rule briefly, then continue in Spanish. Adjust difficulty to the user\'s apparent level.',
+    effect:'Immersive language practice. Auto-correction with explanation. Adaptive difficulty.'
+  },
+  {
+    label:'Legal document analyzer',
+    sys:'You are a legal document assistant. Analyze contracts and identify: key terms, unusual clauses, and potential risks. Always end with: "This is not legal advice. Consult a licensed attorney before signing." Never speculate on legal outcomes.',
+    effect:'Useful analysis with mandatory disclaimer. Limits liability. Prevents overconfident legal claims.'
+  },
+];
+
+function buildReal() {
+  var html = '';
+  REAL_EXAMPLES.forEach(function(r) {
+    html += '<div class="real-example">';
+    html += '<div class="re-label">'+r.label+'</div>';
+    html += '<div class="re-sys">'+r.sys+'</div>';
+    html += '<div class="re-effect">Effect: '+r.effect+'</div>';
+    html += '</div>';
+  });
+  document.getElementById('real-content').innerHTML = html;
+}
+
+var BUILDER_PARTS = [
+  { id:'b-role',  label:'Who is the AI?', placeholder:'e.g. You are a helpful writing coach named Alex...' },
+  { id:'b-task',  label:'What should it focus on?', placeholder:'e.g. Help users improve their blog posts by...' },
+  { id:'b-tone',  label:'What tone/style?', placeholder:'e.g. Be encouraging, concise, use simple language...' },
+  { id:'b-limit', label:'What should it NOT do?', placeholder:'e.g. Do not write the entire article for them...' },
+];
+
+function buildBuilder() {
+  var html = '<div style="display:grid;gap:12px;">';
+  BUILDER_PARTS.forEach(function(p) {
+    html += '<div><div style="font-family:var(--mono);font-size:11px;color:var(--faint);text-transform:uppercase;letter-spacing:.1em;margin-bottom:5px;">'+p.label+'</div>';
+    html += '<textarea id="'+p.id+'" placeholder="'+p.placeholder+'" oninput="buildOutput()" style="width:100%;box-sizing:border-box;background:rgba(0,0,0,.3);border:1px solid var(--border2);border-radius:var(--r-md);padding:10px 12px;font-family:var(--mono);font-size:12px;color:var(--text);resize:vertical;min-height:56px;outline:none;"></textarea></div>';
+  });
+  html += '</div><div style="margin-top:14px;"><div style="font-family:var(--mono);font-size:11px;color:var(--faint);text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px;">Generated System Prompt:</div>';
+  html += '<div id="built-output" style="background:rgba(0,0,0,.4);border:1px solid rgba(167,139,250,.3);border-radius:var(--r-lg);padding:14px;font-family:var(--mono);font-size:12px;color:var(--muted);line-height:1.7;min-height:60px;">Fill in the fields above...</div></div>';
+  document.getElementById('builder-content').innerHTML = html;
+}
+
+function buildOutput() {
+  var role  = document.getElementById('b-role')  ? document.getElementById('b-role').value  : '';
+  var task  = document.getElementById('b-task')  ? document.getElementById('b-task').value  : '';
+  var tone  = document.getElementById('b-tone')  ? document.getElementById('b-tone').value  : '';
+  var limit = document.getElementById('b-limit') ? document.getElementById('b-limit').value : '';
+  var parts = [];
+  if (role)  parts.push(role);
+  if (task)  parts.push(task);
+  if (tone)  parts.push(tone);
+  if (limit) parts.push('Important constraints: ' + limit);
+  var el = document.getElementById('built-output');
+  if (el) el.textContent = parts.join('\n\n') || 'Fill in the fields above...';
+}
+
+function setMode(m) {
+  ['anatomy','real','builder'].forEach(function(x) {
+    document.getElementById('mode-'+x).style.display = x===m?'':'none';
+    document.getElementById('tab-'+x).classList.toggle('active', x===m);
+  });
+  if (m==='real') buildReal();
+  if (m==='builder') buildBuilder();
+  document.getElementById('stage-progress').textContent = m==='anatomy'?'Click any section to learn what it does':m==='real'?'Real-world system prompts':'Build your own system prompt';
+}
+</script>
+<script>(function(){var c=document.getElementById('ai-canvas'),x=c.getContext('2d'),w,h,cols,drops;function r(){w=c.width=window.innerWidth;h=c.height=window.innerHeight;cols=Math.floor(w/16);drops=new Array(cols).fill(0).map(function(){return Math.floor(Math.random()*-60);});}r();window.addEventListener('resize',r);var f=0;function d(){f++;requestAnimationFrame(d);if(f%5!==0)return;x.fillStyle='rgba(6,1,15,0.1)';x.fillRect(0,0,w,h);x.font='12px JetBrains Mono,monospace';for(var i=0;i<cols;i++){x.fillStyle=Math.random()>.96?'rgba(167,139,250,0.18)':'rgba(167,139,250,0.04)';x.fillText(Math.random()>.5?'⚙':'[',i*16,drops[i]*16);if(drops[i]*16>h&&Math.random()>.975)drops[i]=0;else drops[i]++;}}requestAnimationFrame(d);})();</script>
+<script src="../js/main.js"></script>
+</body>
+</html>

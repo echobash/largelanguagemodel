@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Quantization — llm-kit</title>
+  <link rel="stylesheet" href="../css/main.css" />
+  <style>
+    .bits-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:12px; margin:12px 0; }
+    .bits-card { background:var(--bg2); border:2px solid var(--border2); border-radius:var(--r-xl); padding:16px; font-family:var(--mono); text-align:center; transition:all .3s; }
+    .bits-card.selected { transform:scale(1.03); }
+    .bits-name { font-size:18px; font-weight:700; margin-bottom:4px; }
+    .bits-size { font-size:12px; color:var(--muted); margin-bottom:8px; }
+    .bits-bar  { height:8px; border-radius:99px; margin:6px 0; }
+    .bits-note { font-size:11px; color:var(--faint); line-height:1.4; }
+
+    .prec-row { display:flex; align-items:center; gap:10px; font-family:var(--mono); font-size:12px; margin:6px 0; }
+    .prec-num { font-size:20px; font-weight:700; min-width:40px; }
+
+    input[type=range] { accent-color:var(--purple); }
+  </style>
+</head>
+<body>
+<canvas id="ai-canvas" style="opacity:.15;"></canvas>
+<div class="grid-bg"></div>
+<div class="blob blob-2" style="opacity:.25;"></div>
+<nav class="nav scrolled">
+  <a class="nav-brand" href="../index.html"><span class="nav-brand-name">llm-kit</span><span class="nav-brand-by">@echobash</span></a>
+  <ul class="nav-links">
+    <li><a href="../index.html">home</a></li>
+    <li><a href="lora.html">lora</a></li>
+    <li><a href="inference.html">inference</a></li>
+    <li><a href="quantization.html" class="active">quantization</a></li>
+  </ul>
+</nav>
+<div class="tool-wrap">
+  <div class="tool-title">quantization</div>
+  <div class="tool-sub">// How to run a 70B AI model on your laptop — by using less precise numbers</div>
+
+  <div style="background:rgba(251,191,36,.06);border:1px solid rgba(251,191,36,.2);border-radius:var(--r-lg);padding:14px 18px;margin-bottom:24px;font-family:var(--mono);font-size:13px;color:var(--muted);line-height:1.7;">
+    💡 <strong style="color:var(--amber);">The core idea:</strong> A 70B model stores each weight as a 32-bit float (like a very precise decimal number). Quantization rounds those weights to 8-bit or 4-bit integers — less precise, but 4-8× smaller. A 70B FP32 model = 280GB. A 70B INT4 model = 35GB. Same model, fits on a $500 GPU. Quality drops a little. Size drops a lot.
+  </div>
+
+  <div class="mode-tabs">
+    <button class="mode-tab active" id="tab-compare" onclick="setMode('compare')">Bit Width Comparison</button>
+    <button class="mode-tab" id="tab-calc"    onclick="setMode('calc')">Size Calculator</button>
+    <button class="mode-tab" id="tab-formats" onclick="setMode('formats')">Quant Formats</button>
+  </div>
+
+  <div class="stage">
+    <div class="stage-bar">
+      <div class="stage-bar-left"><span class="wp wp-r"></span><span class="wp wp-y"></span><span class="wp wp-g"></span></div>
+      <span class="stage-progress" id="stage-progress">Compare bit widths</span>
+    </div>
+    <div class="stage-body" id="stage-body">
+
+      <div id="mode-compare">
+        <div class="bits-grid" id="bits-grid"></div>
+        <div style="margin-top:10px;font-family:var(--mono);font-size:12px;color:var(--muted);line-height:1.6;">
+          Click a card to see how the same number 3.14159 is stored at each precision level — and how many unique values are possible.
+        </div>
+        <div id="bits-detail" style="margin-top:12px;background:rgba(0,0,0,.3);border:1px solid var(--border2);border-radius:var(--r-lg);padding:14px;font-family:var(--mono);font-size:12px;display:none;"></div>
+      </div>
+
+      <div id="mode-calc" style="display:none;">
+        <div style="font-family:var(--mono);font-size:12px;color:var(--faint);margin-bottom:12px;">Pick a model size and bit width to see the memory required:</div>
+
+        <div style="margin-bottom:12px;">
+          <div style="font-size:11px;color:var(--faint);margin-bottom:6px;">Model parameters: <span id="params-label" style="color:var(--purple);font-weight:700;">7B</span></div>
+          <input type="range" min="0" max="5" value="1" style="width:100%;" oninput="updateCalc()">
+        </div>
+        <div style="margin-bottom:16px;">
+          <div style="font-size:11px;color:var(--faint);margin-bottom:6px;">Bit width: <span id="bits-label" style="color:var(--amber);font-weight:700;">INT8</span></div>
+          <input type="range" min="0" max="3" value="1" style="width:100%;" oninput="updateCalc()">
+        </div>
+
+        <div id="calc-result"></div>
+      </div>
+
+      <div id="mode-formats" style="display:none;">
+        <div id="formats-content"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="explain-panel">
+    <div class="explain-step" id="exp-step">The precision-size tradeoff</div>
+    <div class="explain-text" id="exp-text">Every AI model weight is just a decimal number. FP32 stores it precisely (32 bits = ~7 decimal places). INT8 rounds it to one of 256 buckets. INT4 rounds to one of 16. The model "loses" some precision, but research shows 4-bit and 8-bit quantized models perform surprisingly close to full precision — because most weights don't need extreme precision.</div>
+    <div class="explain-tags" id="exp-tags"><span class="tag tag-a">INT4 = 8x SMALLER THAN FP32</span><span class="tag tag-g">GGUF / GPTQ / AWQ = COMMON FORMATS</span></div>
+  </div>
+</div><!-- ── Also by echobash strip ── -->
+<div class="also-strip">
+  <div class="also-inner">
+    <span class="also-label">also by echobash</span>
+    <div class="also-divider"></div>
+    <div class="also-links">
+      <a href="https://devdunia.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--cyan);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">devdunia</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">networking tools</span>
+      </a>
+      <a href="https://echobash.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--purple);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">echobash</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">portfolio</span>
+      </a>
+      <a href="https://promptflix.in" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--amber);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">promptflix</span><span class="also-link-tld">.in</span>
+        <span class="also-link-sub">prompt library</span>
+      </a>
+    </div>
+  </div>
+</div>
+<footer class="footer">
+  <p>built by echobash &nbsp;·&nbsp; <a href="https://devdunia.com" target="_blank" rel="noopener">devdunia.com</a> &nbsp;·&nbsp; <a href="https://echobash.com" target="_blank" rel="noopener">echobash.com</a> &nbsp;·&nbsp; <a href="https://promptflix.in" target="_blank" rel="noopener">promptflix.in</a></p>
+  <p style="margin-top:4px;">llm-kit is open source — AI tools for everyone</p>
+</footer>
+<script>
+var BITS_DATA = [
+  { name:'FP32', bits:32, color:'var(--red)', sizeMultiplier:4, quality:'Full quality (baseline)', precision:'~7 decimal digits', values:'4 billion values', note:'Used for training. Too big to run most models locally.', example:'3.14159265' },
+  { name:'BF16', bits:16, color:'var(--amber)', sizeMultiplier:2, quality:'~99% of FP32', precision:'~2-3 decimal digits', values:'65,536 values', note:'Default for inference on modern GPUs. Used in cloud APIs. Good balance.', example:'3.140625' },
+  { name:'INT8', bits:8, color:'var(--cyan)', sizeMultiplier:1, quality:'~98% of FP32', precision:'256 discrete levels', values:'256 values', note:'Very common for inference. Excellent quality/size ratio. Most safe for production.', example:'3.1' },
+  { name:'INT4', bits:4, color:'var(--green)', sizeMultiplier:0.5, quality:'~95-97% of FP32', precision:'16 discrete levels', values:'16 values', note:'Allows 70B models on consumer hardware. Small quality drop, huge size benefit.', example:'~3 (rounded)' },
+];
+
+function buildBitsGrid() {
+  var html = '';
+  BITS_DATA.forEach(function(b, i) {
+    var bytes = b.bits / 8;
+    html += '<div class="bits-card" onclick="showBitsDetail('+i+')" style="cursor:pointer;--sel-color:'+b.color+';">';
+    html += '<div class="bits-name" style="color:'+b.color+';">'+b.name+'</div>';
+    html += '<div class="bits-size">'+b.bits+' bits / '+bytes+' bytes per weight</div>';
+    html += '<div class="bits-bar" style="background:'+b.color+';opacity:'+(.4 + i*.15)+'"></div>';
+    html += '<div class="bits-note">'+b.quality+'</div>';
+    html += '</div>';
+  });
+  document.getElementById('bits-grid').innerHTML = html;
+}
+buildBitsGrid();
+
+function showBitsDetail(i) {
+  var b = BITS_DATA[i];
+  var d = document.getElementById('bits-detail');
+  d.style.display = '';
+  d.innerHTML = '<div style="color:'+b.color+';font-weight:700;font-size:13px;margin-bottom:8px;">'+b.name+' — '+b.bits+'-bit</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:11px;color:var(--muted);">' +
+    '<div><div style="color:var(--faint);">Example storage of π:</div><div style="color:'+b.color+';">'+b.example+'</div></div>' +
+    '<div><div style="color:var(--faint);">Distinct values:</div><div style="color:'+b.color+';">'+b.values+'</div></div>' +
+    '<div><div style="color:var(--faint);">Precision:</div><div style="color:var(--muted);">'+b.precision+'</div></div>' +
+    '<div><div style="color:var(--faint);">Quality:</div><div style="color:var(--muted);">'+b.quality+'</div></div>' +
+    '</div>' +
+    '<div style="margin-top:8px;font-size:12px;color:var(--muted);line-height:1.5;">'+b.note+'</div>';
+}
+
+var PARAM_SIZES = [1, 7, 13, 30, 70, 405];
+var BIT_OPTS    = ['FP32 (4 bytes)', 'INT8 (1 byte)', 'INT4 (0.5 byte)', 'INT2 (0.25 byte)'];
+var BIT_BYTES   = [4, 1, 0.5, 0.25];
+var BIT_COLORS  = ['var(--red)','var(--cyan)','var(--green)','var(--purple)'];
+
+function updateCalc() {
+  var sliders = document.querySelectorAll('input[type=range]');
+  var paramIdx = parseInt(sliders[0].value);
+  var bitIdx   = parseInt(sliders[1].value);
+  var params = PARAM_SIZES[paramIdx];
+  var bytesPerParam = BIT_BYTES[bitIdx];
+  var totalGB = params * 1e9 * bytesPerParam / 1e9;
+  var fp32GB  = params * 4;
+
+  document.getElementById('params-label').textContent = params + 'B';
+  document.getElementById('bits-label').textContent = BIT_OPTS[bitIdx].split(' ')[0];
+
+  var html = '';
+  html += '<div style="background:rgba(0,0,0,.3);border:1px solid var(--border2);border-radius:var(--r-lg);padding:14px;font-family:var(--mono);">';
+  html += '<div style="font-size:22px;font-weight:700;color:'+BIT_COLORS[bitIdx]+';margin-bottom:4px;">'+totalGB.toFixed(1)+'GB</div>';
+  html += '<div style="font-size:12px;color:var(--muted);margin-bottom:10px;">required to load in memory</div>';
+
+  var gpus = [
+    { name:'RTX 3090 (24GB)', mem:24, color:'var(--green)' },
+    { name:'RTX 4090 (24GB)', mem:24, color:'var(--green)' },
+    { name:'A100 80GB',       mem:80, color:'var(--cyan)' },
+    { name:'RTX 4080 (16GB)', mem:16, color:'var(--amber)' },
+    { name:'M2 MacBook (96GB unified)', mem:96, color:'var(--purple)' },
+    { name:'M4 Max (128GB unified)',    mem:128, color:'var(--purple)' },
+  ];
+  html += '<div style="font-size:11px;color:var(--faint);margin-bottom:6px;">FITS ON:</div>';
+  gpus.forEach(function(g) {
+    var fits = totalGB <= g.mem;
+    html += '<div style="font-size:11px;margin-bottom:3px;color:'+(fits?g.color:'var(--faint)')+';">'+(fits?'✓':'✗')+' '+g.name+(fits?' — fits':' — needs '+totalGB.toFixed(0)+'GB, has '+g.mem+'GB')+'</div>';
+  });
+  html += '<div style="margin-top:10px;font-size:11px;color:var(--faint);">FP32 equivalent: '+fp32GB.toFixed(0)+'GB &nbsp;|&nbsp; Compression: '+Math.round(fp32GB/totalGB)+'×</div>';
+  html += '</div>';
+  document.getElementById('calc-result').innerHTML = html;
+}
+updateCalc();
+
+var FORMATS_DATA = [
+  { name:'GGUF', color:'var(--green)', tool:'llama.cpp', desc:'Most popular format for running models locally. Works on CPU and GPU. Used by Ollama, LM Studio. Files end in .gguf. Has variants: Q2_K, Q4_K_M, Q5_K_S, Q8_0.', use:'Run Llama/Mistral/etc locally' },
+  { name:'GPTQ', color:'var(--cyan)', tool:'AutoGPTQ', desc:'GPU-optimized quantization. Calibrated on sample data to minimize accuracy loss. Better quality than naive INT4. Used widely in HuggingFace models.', use:'GPU inference, HuggingFace models' },
+  { name:'AWQ', color:'var(--purple)', tool:'AutoAWQ', desc:'Activation-Aware Weight Quantization. Protects important weights from rounding. Often better quality than GPTQ at same bit width.', use:'High-quality INT4 on GPU' },
+  { name:'BitsAndBytes', color:'var(--amber)', tool:'bitsandbytes lib', desc:'Easy integration with HuggingFace Transformers. Load any model in 4-bit or 8-bit with one line: load_in_4bit=True. Great for fine-tuning (QLoRA).', use:'Quick experiments, QLoRA training' },
+  { name:'ONNX', color:'var(--pink)', tool:'ONNX Runtime', desc:'Platform-independent format. Run models on CPU, GPU, or mobile without framework dependencies. Supported by many inference backends.', use:'Production deployment, mobile, edge' },
+];
+
+function buildFormats() {
+  var html = '';
+  FORMATS_DATA.forEach(function(f) {
+    html += '<div style="background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r-xl);padding:14px 16px;margin-bottom:10px;font-family:var(--mono);">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><div style="font-size:14px;font-weight:700;color:'+f.color+';">'+f.name+'</div><div style="font-size:10px;padding:2px 8px;border-radius:99px;background:rgba(255,255,255,.05);border:1px solid var(--border);color:var(--faint);">'+f.tool+'</div></div>';
+    html += '<div style="font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:6px;">'+f.desc+'</div>';
+    html += '<div style="font-size:11px;color:'+f.color+';">Best for: '+f.use+'</div></div>';
+  });
+  document.getElementById('formats-content').innerHTML = html;
+}
+
+function setMode(m) {
+  ['compare','calc','formats'].forEach(function(x) {
+    document.getElementById('mode-'+x).style.display = x===m?'':'none';
+    document.getElementById('tab-'+x).classList.toggle('active', x===m);
+  });
+  if (m==='formats') buildFormats();
+  document.getElementById('stage-progress').textContent = m==='compare'?'Compare bit widths':m==='calc'?'Calculate model size':'Quantization file formats';
+}
+</script>
+<script>(function(){var c=document.getElementById('ai-canvas'),x=c.getContext('2d'),w,h,cols,drops;function r(){w=c.width=window.innerWidth;h=c.height=window.innerHeight;cols=Math.floor(w/16);drops=new Array(cols).fill(0).map(function(){return Math.floor(Math.random()*-60);});}r();window.addEventListener('resize',r);var f=0;function d(){f++;requestAnimationFrame(d);if(f%5!==0)return;x.fillStyle='rgba(6,1,15,0.1)';x.fillRect(0,0,w,h);x.font='12px JetBrains Mono,monospace';for(var i=0;i<cols;i++){x.fillStyle=Math.random()>.96?'rgba(251,191,36,0.18)':'rgba(251,191,36,0.04)';x.fillText(Math.random()>.5?'4':'8',i*16,drops[i]*16);if(drops[i]*16>h&&Math.random()>.975)drops[i]=0;else drops[i]++;}}requestAnimationFrame(d);})();</script>
+<script src="../js/main.js"></script>
+</body>
+</html>

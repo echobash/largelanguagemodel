@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mixture of Experts — llm-kit</title>
+  <link rel="stylesheet" href="../css/main.css" />
+  <style>
+    .expert-grid { display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; margin:12px 0; }
+    .expert-box { border:2px solid var(--border2); border-radius:var(--r-lg); padding:10px; text-align:center; font-family:var(--mono); font-size:11px; transition:all .3s; }
+    .expert-box.active { border-color:var(--ex-color); background:rgba(255,255,255,.05); transform:scale(1.05); }
+    .expert-box.inactive { opacity:.3; }
+    .expert-name { font-weight:700; margin-bottom:3px; }
+    .expert-spec  { color:var(--faint); font-size:10px; }
+
+    .router-vis { background:rgba(0,0,0,.3); border:1px solid var(--border2); border-radius:var(--r-lg); padding:14px 16px; margin:10px 0; font-family:var(--mono); font-size:12px; }
+    .router-bar { display:flex; align-items:center; gap:8px; margin:4px 0; }
+    .router-label { min-width:100px; color:var(--muted); font-size:11px; }
+    .router-track { flex:1; height:10px; background:var(--bg3); border-radius:99px; overflow:hidden; }
+    .router-fill  { height:100%; border-radius:99px; transition:width .5s; }
+  </style>
+</head>
+<body>
+<canvas id="ai-canvas" style="opacity:.15;"></canvas>
+<div class="grid-bg"></div>
+<div class="blob blob-1" style="opacity:.25;"></div>
+<nav class="nav scrolled">
+  <a class="nav-brand" href="../index.html"><span class="nav-brand-name">llm-kit</span><span class="nav-brand-by">@echobash</span></a>
+  <ul class="nav-links">
+    <li><a href="../index.html">home</a></li>
+    <li><a href="llm.html">llm</a></li>
+    <li><a href="inference.html">inference</a></li>
+    <li><a href="moe.html" class="active">mixture of experts</a></li>
+  </ul>
+</nav>
+<div class="tool-wrap">
+  <div class="tool-title">mixture_of_experts</div>
+  <div class="tool-sub">// How to build a 100B model that only costs as much as a 10B model to run</div>
+
+  <div style="background:rgba(56,189,248,.06);border:1px solid rgba(56,189,248,.2);border-radius:var(--r-lg);padding:14px 18px;margin-bottom:24px;font-family:var(--mono);font-size:13px;color:var(--muted);line-height:1.7;">
+    💡 <strong style="color:var(--cyan);">The core idea:</strong> Instead of one massive neural network that handles everything, build a team of specialists. A "router" reads each input and picks 2-3 experts most relevant to that token. Math tokens go to math expert. French tokens go to French expert. Only those experts activate — the rest stay off. Bigger capacity, same compute cost.
+  </div>
+
+  <div class="mode-tabs">
+    <button class="mode-tab active" id="tab-demo"   onclick="setMode('demo')">Interactive Demo</button>
+    <button class="mode-tab" id="tab-how"    onclick="setMode('how')">How It Works</button>
+    <button class="mode-tab" id="tab-models" onclick="setMode('models')">MoE Models</button>
+  </div>
+
+  <div class="stage">
+    <div class="stage-bar">
+      <div class="stage-bar-left"><span class="wp wp-r"></span><span class="wp wp-y"></span><span class="wp wp-g"></span></div>
+      <span class="stage-progress" id="stage-progress">See which experts activate for different inputs</span>
+    </div>
+    <div class="stage-body" id="stage-body">
+
+      <div id="mode-demo">
+        <div style="font-family:var(--mono);font-size:12px;color:var(--faint);margin-bottom:10px;">Pick an input type to see which experts the router activates:</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;" id="input-btns">
+          <button class="mode-tab active" onclick="showExperts('math', this)">Math problem</button>
+          <button class="mode-tab" onclick="showExperts('code', this)">Code</button>
+          <button class="mode-tab" onclick="showExperts('french', this)">French text</button>
+          <button class="mode-tab" onclick="showExperts('medical', this)">Medical query</button>
+          <button class="mode-tab" onclick="showExperts('story', this)">Creative story</button>
+        </div>
+
+        <div style="font-family:var(--mono);font-size:12px;color:var(--faint);margin-bottom:6px;">8 EXPERTS (only 2 activate per token)</div>
+        <div class="expert-grid" id="expert-grid"></div>
+
+        <div class="router-vis" style="margin-top:12px;">
+          <div style="font-size:11px;color:var(--faint);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px;">ROUTER SCORES</div>
+          <div id="router-bars"></div>
+        </div>
+
+        <div id="moe-note" style="font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:10px;line-height:1.6;"></div>
+      </div>
+
+      <div id="mode-how" style="display:none;">
+        <div id="how-content"></div>
+      </div>
+
+      <div id="mode-models" style="display:none;">
+        <div id="models-content"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="explain-panel">
+    <div class="explain-step" id="exp-step">Why MoE is efficient</div>
+    <div class="explain-text" id="exp-text">GPT-4 is believed to be a Mixture of Experts model. Total parameter count might be ~1.7 trillion, but only ~200 billion activate per token. This means: a model with 10x more capacity costs only 1x in compute. MoE enables larger, smarter models without proportionally more GPU cost.</div>
+    <div class="explain-tags" id="exp-tags"><span class="tag tag-c">ONLY 2-4 EXPERTS ACTIVATE PER TOKEN</span><span class="tag tag-p">GPT-4, MIXTRAL, GEMINI USE MoE</span></div>
+  </div>
+</div><!-- ── Also by echobash strip ── -->
+<div class="also-strip">
+  <div class="also-inner">
+    <span class="also-label">also by echobash</span>
+    <div class="also-divider"></div>
+    <div class="also-links">
+      <a href="https://devdunia.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--cyan);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">devdunia</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">networking tools</span>
+      </a>
+      <a href="https://echobash.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--purple);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">echobash</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">portfolio</span>
+      </a>
+      <a href="https://promptflix.in" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--amber);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">promptflix</span><span class="also-link-tld">.in</span>
+        <span class="also-link-sub">prompt library</span>
+      </a>
+    </div>
+  </div>
+</div>
+<footer class="footer">
+  <p>built by echobash &nbsp;·&nbsp; <a href="https://devdunia.com" target="_blank" rel="noopener">devdunia.com</a> &nbsp;·&nbsp; <a href="https://echobash.com" target="_blank" rel="noopener">echobash.com</a> &nbsp;·&nbsp; <a href="https://promptflix.in" target="_blank" rel="noopener">promptflix.in</a></p>
+  <p style="margin-top:4px;">llm-kit is open source — AI tools for everyone</p>
+</footer>
+<script>
+var EXPERTS = [
+  { name:'Math', spec:'Algebra, calculus, statistics', color:'#a78bfa' },
+  { name:'Code', spec:'Programming, debugging', color:'#4ade80' },
+  { name:'Language', spec:'Grammar, translation', color:'#38bdf8' },
+  { name:'Science', spec:'Physics, chemistry, bio', color:'#fbbf24' },
+  { name:'Medical', spec:'Medicine, anatomy, drugs', color:'#f472b6' },
+  { name:'Creative', spec:'Stories, poems, art', color:'#fb923c' },
+  { name:'Logic', spec:'Reasoning, deduction', color:'#e879f9' },
+  { name:'Factual', spec:'History, geography, law', color:'#a3e635' },
+];
+
+var SCENARIOS = {
+  math:    { active:[0,6], note:'The router activates the Math expert and Logic expert. These two together can handle algebraic reasoning. Other experts stay off, saving compute.', scores:[92,5,8,12,3,4,65,10] },
+  code:    { active:[1,6], note:'Code + Logic experts activate. Good code requires both syntax knowledge and logical reasoning. Language expert gets a small score too (for variable naming, comments).', scores:[10,91,18,8,5,12,72,15] },
+  french:  { active:[2,7], note:'Language expert (handles non-English text) + Factual expert. For French text, grammar and cultural context both matter.', scores:[8,5,95,6,4,22,14,78] },
+  medical: { active:[4,3], note:'Medical expert activates strongly + Science expert. A question about a drug interaction needs both medical knowledge and biochemistry.', scores:[15,8,10,74,96,8,20,25] },
+  story:   { active:[5,2], note:'Creative expert dominates + Language expert. Storytelling needs imagination AND language mastery. Logic expert gets a small score for plot consistency.', scores:[5,10,60,8,6,94,35,20] },
+};
+
+function showExperts(type, btn) {
+  document.querySelectorAll('#input-btns .mode-tab').forEach(function(b) { b.classList.remove('active'); });
+  btn.classList.add('active');
+  var s = SCENARIOS[type];
+  var html = '';
+  EXPERTS.forEach(function(e, i) {
+    var isActive = s.active.indexOf(i) >= 0;
+    html += '<div class="expert-box '+(isActive?'active':'inactive')+'" style="--ex-color:'+e.color+';">';
+    html += '<div class="expert-name" style="color:'+(isActive?e.color:'var(--faint)')+';">'+e.name+'</div>';
+    html += '<div class="expert-spec">'+e.spec+'</div>';
+    if (isActive) html += '<div style="margin-top:4px;font-size:10px;color:'+e.color+';">✓ ACTIVE</div>';
+    html += '</div>';
+  });
+  document.getElementById('expert-grid').innerHTML = html;
+
+  var barHtml = '';
+  EXPERTS.forEach(function(e, i) {
+    barHtml += '<div class="router-bar"><div class="router-label">'+e.name+'</div>';
+    barHtml += '<div class="router-track"><div class="router-fill" style="width:'+s.scores[i]+'%;background:'+e.color+'40;border:1px solid '+e.color+'50;"></div></div>';
+    barHtml += '<div style="font-family:var(--mono);font-size:10px;min-width:30px;text-align:right;color:'+(s.active.indexOf(i)>=0?e.color:'var(--faint)')+';">'+s.scores[i]+'</div>';
+    barHtml += '</div>';
+  });
+  document.getElementById('router-bars').innerHTML = barHtml;
+  document.getElementById('moe-note').textContent = s.note;
+}
+
+showExperts('math', document.querySelector('#input-btns .mode-tab'));
+
+var HOW_STEPS = [
+  { color:'var(--purple)', title:'1. Token comes in', desc:'The model processes each token (word piece) one at a time. For each token, the router decides which experts to use.' },
+  { color:'var(--cyan)',   title:'2. Router evaluates all experts', desc:'A small "router network" (just a linear layer) sees the token and outputs a score for each expert. These scores say: "how relevant is this expert for this token?"' },
+  { color:'var(--amber)',  title:'3. Top-K experts selected', desc:'Only the top K experts (usually 2) are selected. The others are completely bypassed — no computation, no cost. The selected experts\' outputs are averaged (weighted by their router scores).' },
+  { color:'var(--green)',  title:'4. Experts process in parallel', desc:'The 2 selected experts process the token simultaneously on different GPUs. They each apply their specialized transformations and return their outputs.' },
+  { color:'var(--pink)',   title:'5. Outputs combined', desc:'The outputs from the active experts are combined: output = score_A × expert_A(x) + score_B × expert_B(x). This weighted average is the final MoE layer output.' },
+  { color:'var(--text)',   title:'6. Load balancing', desc:'A critical challenge: if the router always picks the same 2 experts, others never learn. A load-balancing loss term penalizes uneven expert usage during training, ensuring all experts specialize.' },
+];
+
+function buildHow() {
+  var html = '';
+  HOW_STEPS.forEach(function(s) {
+    html += '<div style="display:flex;gap:12px;margin-bottom:12px;"><div style="flex:0 0 10px;margin-top:6px;width:10px;height:10px;border-radius:50%;background:'+s.color+';flex-shrink:0;"></div><div><div style="font-family:var(--mono);font-size:13px;font-weight:700;color:'+s.color+';margin-bottom:4px;">'+s.title+'</div><div style="font-family:var(--mono);font-size:12px;color:var(--muted);line-height:1.6;">'+s.desc+'</div></div></div>';
+  });
+  document.getElementById('how-content').innerHTML = html;
+}
+
+var MODELS_DATA = [
+  { name:'Mixtral 8×7B', maker:'Mistral AI', params:'8 experts × 7B = 56B total, 14B active', note:'First widely available MoE. Great quality at low inference cost. Open weights.', color:'var(--cyan)' },
+  { name:'GPT-4', maker:'OpenAI (believed)', params:'Estimated: ~8 experts, ~220B active', note:'Believed to be MoE based on leaked info and researchers\' analysis. OpenAI hasn\'t confirmed.', color:'var(--green)' },
+  { name:'Gemini 1.5 Pro', maker:'Google', params:'Uses MoE (details not public)', note:'Google confirmed Gemini uses MoE. Enables the massive 1M token context window at reasonable cost.', color:'var(--amber)' },
+  { name:'DeepSeek-V3', maker:'DeepSeek', params:'671B total, 37B active', note:'Chinese open-source MoE model matching GPT-4 class quality. Major breakthrough in late 2024.', color:'var(--purple)' },
+  { name:'Grok 1', maker:'xAI', params:'314B total, 86B active (2 of 8 experts)', note:'Elon Musk\'s AI company. Open-sourced. One of the largest open MoE models.', color:'var(--pink)' },
+];
+
+function buildModels() {
+  var html = '';
+  MODELS_DATA.forEach(function(m) {
+    html += '<div style="background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r-xl);padding:14px 16px;margin-bottom:10px;font-family:var(--mono);"><div style="font-size:14px;font-weight:700;color:'+m.color+';margin-bottom:3px;">'+m.name+'</div><div style="font-size:10px;color:var(--faint);margin-bottom:6px;">by '+m.maker+'</div><div style="font-size:12px;color:var(--purple);margin-bottom:6px;">'+m.params+'</div><div style="font-size:12px;color:var(--muted);line-height:1.5;">'+m.note+'</div></div>';
+  });
+  document.getElementById('models-content').innerHTML = html;
+}
+
+function setMode(m) {
+  ['demo','how','models'].forEach(function(x) {
+    document.getElementById('mode-'+x).style.display = x===m?'':'none';
+    document.getElementById('tab-'+x).classList.toggle('active', x===m);
+  });
+  if (m==='how') buildHow();
+  if (m==='models') buildModels();
+  document.getElementById('stage-progress').textContent = m==='demo'?'See which experts activate':m==='how'?'How MoE layers work':'Real MoE models';
+}
+</script>
+<script>(function(){var c=document.getElementById('ai-canvas'),x=c.getContext('2d'),w,h,cols,drops;function r(){w=c.width=window.innerWidth;h=c.height=window.innerHeight;cols=Math.floor(w/16);drops=new Array(cols).fill(0).map(function(){return Math.floor(Math.random()*-60);});}r();window.addEventListener('resize',r);var f=0;function d(){f++;requestAnimationFrame(d);if(f%5!==0)return;x.fillStyle='rgba(6,1,15,0.1)';x.fillRect(0,0,w,h);x.font='12px JetBrains Mono,monospace';for(var i=0;i<cols;i++){x.fillStyle=Math.random()>.96?'rgba(56,189,248,0.18)':'rgba(56,189,248,0.04)';x.fillText(Math.random()>.5?'E':'R',i*16,drops[i]*16);if(drops[i]*16>h&&Math.random()>.975)drops[i]=0;else drops[i]++;}}requestAnimationFrame(d);})();</script>
+<script src="../js/main.js"></script>
+</body>
+</html>

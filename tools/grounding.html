@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Grounding — llm-kit</title>
+  <link rel="stylesheet" href="../css/main.css" />
+  <style>
+    .resp-block { background:var(--bg2); border:1px solid var(--border2); border-radius:var(--r-xl); padding:16px 20px; margin-bottom:12px; font-family:var(--mono); font-size:12px; line-height:1.7; }
+    .resp-label  { font-size:10px; text-transform:uppercase; letter-spacing:.1em; margin-bottom:8px; }
+    .citation    { display:inline-flex; align-items:center; gap:4px; background:rgba(167,139,250,.15); border:1px solid rgba(167,139,250,.3); border-radius:var(--r-sm); padding:1px 6px; font-size:10px; color:var(--purple); cursor:pointer; transition:background .2s; }
+    .citation:hover { background:rgba(167,139,250,.3); }
+    .grounded-text { color:var(--text); }
+    .ungrounded-text { color:var(--muted); }
+    .hallucinated { color:var(--red); text-decoration:underline wavy var(--red); }
+
+    .source-box { background:rgba(0,0,0,.35); border:1px solid rgba(167,139,250,.25); border-radius:var(--r-lg); padding:12px 16px; margin-top:10px; font-family:var(--mono); font-size:11px; color:var(--muted); display:none; }
+    .source-box.show { display:block; }
+    .source-title { color:var(--purple); font-weight:700; margin-bottom:4px; }
+
+    .approach-card { background:var(--bg2); border:1px solid var(--border2); border-radius:var(--r-xl); padding:14px 16px; margin-bottom:10px; font-family:var(--mono); }
+  </style>
+</head>
+<body>
+<canvas id="ai-canvas" style="opacity:.15;"></canvas>
+<div class="grid-bg"></div>
+<div class="blob blob-2" style="opacity:.25;"></div>
+<nav class="nav scrolled">
+  <a class="nav-brand" href="../index.html"><span class="nav-brand-name">llm-kit</span><span class="nav-brand-by">@echobash</span></a>
+  <ul class="nav-links">
+    <li><a href="../index.html">home</a></li>
+    <li><a href="rag.html">rag</a></li>
+    <li><a href="hallucination.html">hallucination</a></li>
+    <li><a href="grounding.html" class="active">grounding</a></li>
+  </ul>
+</nav>
+<div class="tool-wrap">
+  <div class="tool-title">grounding</div>
+  <div class="tool-sub">// Tying AI answers to real, verifiable sources instead of just vibes</div>
+
+  <div style="background:rgba(74,222,128,.06);border:1px solid rgba(74,222,128,.2);border-radius:var(--r-lg);padding:14px 18px;margin-bottom:24px;font-family:var(--mono);font-size:13px;color:var(--muted);line-height:1.7;">
+    💡 <strong style="color:var(--green);">The core idea:</strong> An "ungrounded" AI answer is based on patterns from training data — you can't verify where it came from or if it's still accurate. A "grounded" answer is tied to specific sources: "According to [document X, page 3]...". Grounding makes AI outputs verifiable, trustworthy, and useful in high-stakes situations.
+  </div>
+
+  <div class="mode-tabs">
+    <button class="mode-tab active" id="tab-compare" onclick="setMode('compare')">Ungrounded vs Grounded</button>
+    <button class="mode-tab" id="tab-how"     onclick="setMode('how')">How to Ground AI</button>
+    <button class="mode-tab" id="tab-tools"   onclick="setMode('tools')">Search + Grounding</button>
+  </div>
+
+  <div class="stage">
+    <div class="stage-bar">
+      <div class="stage-bar-left"><span class="wp wp-r"></span><span class="wp wp-y"></span><span class="wp wp-g"></span></div>
+      <span class="stage-progress" id="stage-progress">Compare ungrounded vs grounded responses</span>
+    </div>
+    <div class="stage-body" id="stage-body">
+
+      <div id="mode-compare">
+        <div style="font-family:var(--mono);font-size:12px;color:var(--faint);margin-bottom:10px;">Question: "What is the current minimum wage in California?"</div>
+
+        <div class="resp-block" style="border-color:rgba(248,113,113,.3);">
+          <div class="resp-label" style="color:var(--red);">❌ Ungrounded response</div>
+          <div class="ungrounded-text">The minimum wage in California is <span class="hallucinated">$15.50 per hour</span>. This is among the highest in the country. <span class="hallucinated">It was last updated in January 2022</span> and applies to all employers regardless of size.</div>
+          <div style="margin-top:8px;font-size:11px;color:var(--red);">⚠️ The AI pulled this from training data — it may be outdated. No source provided. Could be wrong.</div>
+        </div>
+
+        <div class="resp-block" style="border-color:rgba(74,222,128,.3);">
+          <div class="resp-label" style="color:var(--green);">✅ Grounded response (with RAG + search)</div>
+          <div class="grounded-text">
+            According to the California Department of Industrial Relations <span class="citation" onclick="toggleSource('s1')">[1] ca.gov</span>, the minimum wage in California as of January 1, 2024 is <strong style="color:var(--green);">$16.00 per hour</strong> for all employers. <span class="citation" onclick="toggleSource('s2')">[2] ABC News</span> reports that fast food workers under AB 1228 receive a higher minimum of $20/hour starting April 2024.
+          </div>
+          <div id="s1" class="source-box">
+            <div class="source-title">[1] California DIR — dir.ca.gov/iwc/minimumwagehistory.htm</div>
+            Retrieved: Today. Excerpt: "Effective January 1, 2024, the minimum wage in California is $16.00 per hour for all employers, regardless of size."
+          </div>
+          <div id="s2" class="source-box">
+            <div class="source-title">[2] ABC News — abc7news.com/story/fast-food-minimum-wage...</div>
+            Retrieved: Today. Excerpt: "Fast food workers will earn $20 minimum wage starting April 1, 2024 under AB 1228 signed by Governor Newsom."
+          </div>
+          <div style="margin-top:8px;font-size:11px;color:var(--green);">✓ Sources are cited. You can verify each claim. Current as of today (web search used).</div>
+        </div>
+
+        <div style="font-family:var(--mono);font-size:12px;color:var(--muted);line-height:1.7;margin-top:4px;">Click the <span class="citation">[1] citation</span> badges to see source details. This is what grounding looks like in practice.</div>
+      </div>
+
+      <div id="mode-how" style="display:none;">
+        <div id="how-content"></div>
+      </div>
+
+      <div id="mode-tools" style="display:none;">
+        <div id="tools-content"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="explain-panel">
+    <div class="explain-step" id="exp-step">Grounding vs RAG</div>
+    <div class="explain-text" id="exp-text">Grounding is the broad goal: answers tied to verifiable sources. RAG (Retrieval-Augmented Generation) is one specific technique to achieve grounding — retrieve relevant documents, inject them into context, ask the AI to answer based on them. Web search is another grounding technique. Grounding = the goal. RAG/search = the methods.</div>
+    <div class="explain-tags" id="exp-tags"><span class="tag tag-g">GROUNDING = VERIFIABLE ANSWERS</span><span class="tag tag-c">RAG + SEARCH = COMMON APPROACHES</span></div>
+  </div>
+</div><!-- ── Also by echobash strip ── -->
+<div class="also-strip">
+  <div class="also-inner">
+    <span class="also-label">also by echobash</span>
+    <div class="also-divider"></div>
+    <div class="also-links">
+      <a href="https://devdunia.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--cyan);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">devdunia</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">networking tools</span>
+      </a>
+      <a href="https://echobash.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--purple);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">echobash</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">portfolio</span>
+      </a>
+      <a href="https://promptflix.in" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--amber);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">promptflix</span><span class="also-link-tld">.in</span>
+        <span class="also-link-sub">prompt library</span>
+      </a>
+    </div>
+  </div>
+</div>
+<footer class="footer">
+  <p>built by echobash &nbsp;·&nbsp; <a href="https://devdunia.com" target="_blank" rel="noopener">devdunia.com</a> &nbsp;·&nbsp; <a href="https://echobash.com" target="_blank" rel="noopener">echobash.com</a> &nbsp;·&nbsp; <a href="https://promptflix.in" target="_blank" rel="noopener">promptflix.in</a></p>
+  <p style="margin-top:4px;">llm-kit is open source — AI tools for everyone</p>
+</footer>
+<script>
+function toggleSource(id) {
+  var el = document.getElementById(id);
+  if (el) el.classList.toggle('show');
+}
+
+var HOW_APPROACHES = [
+  { color:'var(--purple)', title:'RAG — Retrieval-Augmented Generation', desc:'The most common approach. Before generating, retrieve relevant documents from your knowledge base. Pass them as context. Tell the AI: "Answer ONLY based on these documents." Hallucination rate drops dramatically. Answers are verifiable.' },
+  { color:'var(--cyan)',   title:'Web Search Tool', desc:'Give the AI a web search tool (like Perplexity, ChatGPT with browsing, or a custom function calling tool). The AI searches for current information, reads the results, and cites sources. Best for queries requiring current information.' },
+  { color:'var(--amber)',  title:'Document Grounding (PDFs, databases)', desc:'Upload specific documents (annual report, legal contract, medical guidelines) and ask questions about them. The AI can only use what\'s in those documents — no hallucinating facts from elsewhere.' },
+  { color:'var(--green)',  title:'Explicit Citation Prompting', desc:'Add to your system prompt: "For every factual claim, add a citation in [brackets]. If you cannot cite a fact, say \'unverified.\'" Forces the AI to flag uncertainty and produces auditable output.' },
+  { color:'var(--pink)',   title:'Confidence + Hedging', desc:'Prompt: "If you\'re not confident about a fact, use language like \'I believe\', \'This may have changed\', or \'Please verify this.\'". Calibrated uncertainty is a form of grounding — honest about limitations.' },
+];
+
+function buildHow() {
+  var html = '';
+  HOW_APPROACHES.forEach(function(h, i) {
+    html += '<div style="display:flex;gap:12px;margin-bottom:12px;"><div style="flex:0 0 26px;height:26px;border-radius:50%;background:rgba(0,0,0,.4);border:2px solid '+h.color+';display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:11px;font-weight:700;color:'+h.color+';flex-shrink:0;">'+(i+1)+'</div><div><div style="font-family:var(--mono);font-size:13px;font-weight:700;color:'+h.color+';margin-bottom:4px;">'+h.title+'</div><div style="font-family:var(--mono);font-size:12px;color:var(--muted);line-height:1.6;">'+h.desc+'</div></div></div>';
+  });
+  document.getElementById('how-content').innerHTML = html;
+}
+
+var TOOLS_DATA = [
+  { name:'Perplexity AI', color:'var(--cyan)', desc:'Search engine built around grounded AI responses. Every answer has citations. Great for research questions.', use:'Research, news, fact-checking' },
+  { name:'ChatGPT Browse', color:'var(--green)', desc:'GPT-4 with Bing web search. Can look up current information. Citations shown in responses.', use:'Current events, recent info' },
+  { name:'Bing Copilot', color:'var(--amber)', desc:'Microsoft\'s AI search built into Bing. Strong real-time grounding with web results.', use:'Quick facts, shopping, news' },
+  { name:'Claude + MCP Search', color:'var(--purple)', desc:'Using Brave Search MCP server with Claude. Programmatically ground any AI app with web search.', use:'Custom AI apps needing real-time data' },
+  { name:'Google Grounding API', color:'var(--pink)', desc:'Google\'s Vertex AI grounding with Google Search. Connects AI to live Google search results with citations.', use:'Enterprise apps needing Google-quality search' },
+];
+
+function buildTools() {
+  var html = '';
+  TOOLS_DATA.forEach(function(t) {
+    html += '<div class="approach-card"><div style="font-size:13px;font-weight:700;color:'+t.color+';margin-bottom:4px;">'+t.name+'</div><div style="font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:6px;">'+t.desc+'</div><div style="font-size:11px;color:var(--faint);">Best for: '+t.use+'</div></div>';
+  });
+  document.getElementById('tools-content').innerHTML = html;
+}
+
+function setMode(m) {
+  ['compare','how','tools'].forEach(function(x) {
+    document.getElementById('mode-'+x).style.display = x===m?'':'none';
+    document.getElementById('tab-'+x).classList.toggle('active', x===m);
+  });
+  if (m==='how') buildHow();
+  if (m==='tools') buildTools();
+  document.getElementById('stage-progress').textContent = m==='compare'?'Compare ungrounded vs grounded':m==='how'?'How to ground AI responses':'Tools with built-in grounding';
+}
+</script>
+<script>(function(){var c=document.getElementById('ai-canvas'),x=c.getContext('2d'),w,h,cols,drops;function r(){w=c.width=window.innerWidth;h=c.height=window.innerHeight;cols=Math.floor(w/16);drops=new Array(cols).fill(0).map(function(){return Math.floor(Math.random()*-60);});}r();window.addEventListener('resize',r);var f=0;function d(){f++;requestAnimationFrame(d);if(f%5!==0)return;x.fillStyle='rgba(6,1,15,0.1)';x.fillRect(0,0,w,h);x.font='12px JetBrains Mono,monospace';for(var i=0;i<cols;i++){x.fillStyle=Math.random()>.96?'rgba(74,222,128,0.18)':'rgba(74,222,128,0.04)';x.fillText(Math.random()>.5?'[¹]':'✓',i*16,drops[i]*16);if(drops[i]*16>h&&Math.random()>.975)drops[i]=0;else drops[i]++;}}requestAnimationFrame(d);})();</script>
+<script src="../js/main.js"></script>
+</body>
+</html>

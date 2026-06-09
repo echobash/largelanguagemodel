@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Attention Mechanism — llm-kit</title>
+  <link rel="stylesheet" href="../css/main.css" />
+  <style>
+    .attn-sentence { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:20px; }
+    .attn-tok {
+      padding:8px 14px; border-radius:var(--r-md); font-family:var(--mono); font-size:14px;
+      font-weight:700; border:2px solid var(--border2); background:var(--bg2);
+      cursor:pointer; transition:all .25s; user-select:none;
+    }
+    .attn-tok:hover { border-color:rgba(167,139,250,.4); }
+    .attn-tok.selected { border-color:rgba(167,139,250,.8); background:rgba(167,139,250,.15); color:var(--purple); }
+    .attn-tok.high   { border-color:rgba(74,222,128,.7); background:rgba(74,222,128,.2); color:var(--green); }
+    .attn-tok.medium { border-color:rgba(251,191,36,.5); background:rgba(251,191,36,.1); color:var(--amber); }
+    .attn-tok.low    { border-color:rgba(255,255,255,.12); background:rgba(255,255,255,.03); color:var(--faint); }
+
+    .attn-grid { overflow-x:auto; margin:16px 0; }
+    .attn-table { border-collapse:separate; border-spacing:3px; }
+    .attn-table th, .attn-table td {
+      padding:8px 12px; font-family:var(--mono); font-size:12px;
+      border-radius:4px; text-align:center; min-width:70px;
+    }
+    .attn-table th { color:var(--faint); background:transparent; }
+    .attn-cell { transition:all .5s; }
+
+    .qkv-diagram { display:flex; gap:16px; flex-wrap:wrap; margin:12px 0; }
+    .qkv-box {
+      flex:1; min-width:180px; background:var(--bg2); border:1px solid var(--border2);
+      border-radius:var(--r-lg); padding:14px;
+    }
+    .qkv-label { font-family:var(--mono); font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.1em; margin-bottom:8px; }
+    .qkv-vec { font-family:var(--mono); font-size:11px; color:var(--muted); line-height:1.6; }
+    .qkv-vec span { display:inline-block; padding:2px 6px; border-radius:3px; margin:1px; }
+  </style>
+</head>
+<body>
+<canvas id="ai-canvas" style="opacity:.15;"></canvas>
+<div class="grid-bg"></div>
+<div class="blob blob-1" style="opacity:.3;"></div>
+
+<nav class="nav scrolled">
+  <a class="nav-brand" href="../index.html"><span class="nav-brand-name">llm-kit</span><span class="nav-brand-by">@echobash</span></a>
+  <ul class="nav-links">
+    <li><a href="../index.html">home</a></li>
+    <li><a href="transformer.html">transformer</a></li>
+    <li><a href="attention.html" class="active">attention</a></li>
+    <li><a href="tokens.html">tokens</a></li>
+  </ul>
+</nav>
+
+<div class="tool-wrap">
+  <div class="tool-title">attention_explained</div>
+  <div class="tool-sub">// How words "pay attention" to each other — click any word to see what it focuses on</div>
+
+  <div class="mode-tabs">
+    <button class="mode-tab active" id="tab-vis" onclick="setMode('visual')">Interactive Attention Map</button>
+    <button class="mode-tab" id="tab-qkv"  onclick="setMode('qkv')">Q, K, V Explained</button>
+  </div>
+
+  <div class="stage">
+    <div class="stage-bar">
+      <div class="stage-bar-left"><span class="wp wp-r"></span><span class="wp wp-y"></span><span class="wp wp-g"></span></div>
+      <span class="stage-progress" id="stage-progress">Click any word to see how it attends to others</span>
+    </div>
+    <div class="stage-body" id="stage-body">
+
+      <!-- Visual mode -->
+      <div id="mode-visual">
+        <div style="font-family:var(--mono);font-size:12px;color:var(--faint);margin-bottom:10px;">SENTENCE — click any word</div>
+        <div class="attn-sentence" id="attn-sentence"></div>
+
+        <div style="font-family:var(--mono);font-size:12px;color:var(--faint);margin-bottom:10px;">ATTENTION MAP — darker = more attention</div>
+        <div class="attn-grid">
+          <table class="attn-table" id="attn-table"></table>
+        </div>
+        <div style="display:flex;gap:16px;margin-top:8px;font-family:var(--mono);font-size:11px;color:var(--faint);">
+          <span><span style="display:inline-block;width:12px;height:12px;background:rgba(74,222,128,.8);border-radius:2px;margin-right:4px;vertical-align:middle;"></span>High attention</span>
+          <span><span style="display:inline-block;width:12px;height:12px;background:rgba(251,191,36,.5);border-radius:2px;margin-right:4px;vertical-align:middle;"></span>Medium attention</span>
+          <span><span style="display:inline-block;width:12px;height:12px;background:rgba(255,255,255,.06);border-radius:2px;margin-right:4px;vertical-align:middle;"></span>Low attention</span>
+        </div>
+      </div>
+
+      <!-- QKV mode -->
+      <div id="mode-qkv" style="display:none;">
+        <div class="ctrl-row">
+          <button class="step-btn" id="btn-step-qkv" onclick="stepQKV()">step →</button>
+          <button class="play-btn" onclick="playQKV()">▶ play all</button>
+          <button class="reset-btn" onclick="resetQKV()">↺ reset</button>
+          <span style="font-family:var(--mono);font-size:12px;color:var(--faint);" id="qkv-counter">Step 0 / 5</span>
+        </div>
+        <div id="qkv-content">
+          <div style="font-family:var(--mono);font-size:13px;color:var(--muted);margin-bottom:12px;">
+            Sentence: <span style="color:var(--purple);">"The cat sat on the mat"</span>
+          </div>
+          <div class="qkv-diagram" id="qkv-diagram"></div>
+          <div style="margin-top:12px;padding:12px 16px;background:rgba(0,0,0,.3);border-radius:var(--r-md);border:1px solid var(--border);font-family:var(--mono);font-size:12px;color:var(--cyan);" id="qkv-formula"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="explain-panel">
+    <div class="explain-step" id="exp-step">What is Attention?</div>
+    <div class="explain-text" id="exp-text">Attention is how an AI model figures out which words are most important when reading a sentence. When you read "The animal didn't cross the street because it was too tired" — you know "it" refers to "animal", not "street". Attention lets the AI make that same connection automatically.</div>
+    <div class="explain-tags" id="exp-tags"></div>
+  </div>
+</div><!-- ── Also by echobash strip ── -->
+<div class="also-strip">
+  <div class="also-inner">
+    <span class="also-label">also by echobash</span>
+    <div class="also-divider"></div>
+    <div class="also-links">
+      <a href="https://devdunia.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--cyan);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">devdunia</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">networking tools</span>
+      </a>
+      <a href="https://echobash.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--purple);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">echobash</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">portfolio</span>
+      </a>
+      <a href="https://promptflix.in" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--amber);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">promptflix</span><span class="also-link-tld">.in</span>
+        <span class="also-link-sub">prompt library</span>
+      </a>
+    </div>
+  </div>
+</div>
+<footer class="footer">
+  <p>built by echobash &nbsp;·&nbsp; <a href="https://devdunia.com" target="_blank" rel="noopener">devdunia.com</a> &nbsp;·&nbsp; <a href="https://echobash.com" target="_blank" rel="noopener">echobash.com</a> &nbsp;·&nbsp; <a href="https://promptflix.in" target="_blank" rel="noopener">promptflix.in</a></p>
+  <p style="margin-top:4px;">llm-kit is open source — AI tools for everyone</p>
+</footer>
+
+<script>
+var SENTENCE = ['The','animal','did','not','cross','the','street','because','it','was','tired'];
+
+// Attention weights for each word (which other words it pays most attention to)
+var ATTN_WEIGHTS = {
+  'The':      [0.8, 0.4, 0.1, 0.1, 0.1, 0.3, 0.1, 0.1, 0.1, 0.1, 0.1],
+  'animal':   [0.5, 0.9, 0.2, 0.2, 0.2, 0.1, 0.1, 0.3, 0.8, 0.5, 0.4],
+  'did':      [0.1, 0.3, 0.8, 0.5, 0.3, 0.1, 0.1, 0.1, 0.1, 0.2, 0.1],
+  'not':      [0.1, 0.2, 0.6, 0.9, 0.4, 0.1, 0.1, 0.2, 0.2, 0.3, 0.2],
+  'cross':    [0.1, 0.2, 0.3, 0.4, 0.9, 0.2, 0.5, 0.3, 0.2, 0.1, 0.1],
+  'the':      [0.7, 0.3, 0.1, 0.1, 0.2, 0.8, 0.5, 0.1, 0.1, 0.1, 0.1],
+  'street':   [0.1, 0.2, 0.2, 0.3, 0.7, 0.5, 0.9, 0.4, 0.3, 0.1, 0.1],
+  'because':  [0.2, 0.4, 0.3, 0.4, 0.4, 0.2, 0.3, 0.9, 0.5, 0.4, 0.5],
+  'it':       [0.3, 0.9, 0.2, 0.2, 0.2, 0.2, 0.2, 0.4, 0.8, 0.5, 0.6],
+  'was':      [0.2, 0.5, 0.2, 0.3, 0.2, 0.1, 0.1, 0.3, 0.6, 0.9, 0.7],
+  'tired':    [0.1, 0.7, 0.2, 0.3, 0.1, 0.1, 0.1, 0.3, 0.8, 0.6, 0.9],
+};
+
+var ATTN_INFO = {
+  'it': { main:'it → animal (0.90)', note: '"it" strongly attends to "animal" — the AI learns that "it" refers to the animal, not the street!' },
+  'tired': { main:'tired → animal, it', note:'"tired" attends to "animal" and "it" because fatigue describes the animal.' },
+  'street': { main:'street → cross, the', note:'"street" attends to "cross" — the street is what was not crossed.' },
+  'animal': { main:'animal → it, tired', note:'"animal" connects to "it" and "tired" through the sentence.' },
+};
+
+var mode = 'visual', selectedTok = null;
+
+function setMode(m) {
+  mode = m;
+  document.getElementById('tab-vis').classList.toggle('active', m === 'visual');
+  document.getElementById('tab-qkv').classList.toggle('active', m === 'qkv');
+  document.getElementById('mode-visual').style.display = m === 'visual' ? '' : 'none';
+  document.getElementById('mode-qkv').style.display   = m === 'qkv'    ? '' : 'none';
+  if (m === 'visual') buildVisual();
+  if (m === 'qkv') resetQKV();
+}
+
+function buildVisual() {
+  // Sentence tokens
+  var sentHtml = '';
+  SENTENCE.forEach(function(tok) {
+    sentHtml += '<div class="attn-tok" onclick="selectTok(\''+tok+'\')" id="tok-'+SENTENCE.indexOf(tok)+'">'+tok+'</div>';
+  });
+  document.getElementById('attn-sentence').innerHTML = sentHtml;
+
+  // Build attention table (all-vs-all heatmap)
+  var th = '<tr><th></th>';
+  SENTENCE.forEach(function(t) { th += '<th>'+t+'</th>'; });
+  th += '</tr>';
+
+  var rows = '';
+  SENTENCE.forEach(function(rowTok) {
+    var w = ATTN_WEIGHTS[rowTok];
+    rows += '<tr><th style="text-align:right;padding-right:8px;">'+rowTok+'</th>';
+    w.forEach(function(v) {
+      var a = Math.round(v * 255);
+      var bg = 'rgba(167,139,250,' + (v*0.7) + ')';
+      if (v > 0.75) bg = 'rgba(74,222,128,' + (v*0.8) + ')';
+      else if (v > 0.4) bg = 'rgba(251,191,36,' + (v*0.7) + ')';
+      rows += '<td class="attn-cell" style="background:'+bg+';color:rgba(255,255,255,.7);">'+v.toFixed(2)+'</td>';
+    });
+    rows += '</tr>';
+  });
+
+  document.getElementById('attn-table').innerHTML = th + rows;
+}
+
+function selectTok(tok) {
+  selectedTok = tok;
+  var idx = SENTENCE.indexOf(tok);
+  var weights = ATTN_WEIGHTS[tok];
+
+  // Update token colors
+  SENTENCE.forEach(function(t, i) {
+    var el = document.getElementById('tok-'+i);
+    el.classList.remove('selected','high','medium','low');
+    if (t === tok) {
+      el.classList.add('selected');
+    } else {
+      var w = weights[i];
+      if (w > 0.7) el.classList.add('high');
+      else if (w > 0.4) el.classList.add('medium');
+      else el.classList.add('low');
+    }
+  });
+
+  var info = ATTN_INFO[tok];
+  if (info) {
+    document.getElementById('exp-step').textContent = 'Word: "' + tok + '" — ' + info.main;
+    document.getElementById('exp-text').textContent = info.note + ' This is the core insight of self-attention: every word asks "which other words do I need to understand my own meaning?"';
+    document.getElementById('exp-tags').innerHTML = '<span class="tag tag-g">TRY "it" — connects to "animal"</span>';
+  } else {
+    document.getElementById('exp-step').textContent = 'Word: "' + tok + '"';
+    document.getElementById('exp-text').textContent = 'The highlighted green words are what "' + tok + '" pays the most attention to. In green (high): strong connection. Yellow (medium): some connection. Faded (low): little connection. Click "it" to see the pronoun-resolution example!';
+    document.getElementById('exp-tags').innerHTML = '<span class="tag tag-p">TIP: click "it" for a clear example</span>';
+  }
+  document.getElementById('stage-progress').textContent = '"' + tok + '" attends most to: ' + SENTENCE.filter(function(t,i){return weights[i]>0.7&&t!==tok;}).join(', ');
+}
+
+// QKV walkthrough
+var qkvStep = 0;
+var QKV_STEPS = [
+  {
+    title: 'Step 1 — Each word gets 3 vectors: Q, K, V',
+    body: 'Attention needs to figure out which words are related. To do this, each word is converted into 3 different vectors:\n• Q (Query) = "What am I looking for?"\n• K (Key) = "What do I contain?"\n• V (Value) = "What information do I carry?"\n\nThink of it like a library: Q is your search term, K is the book title, V is the book content.',
+    formula: 'Q = word × Wq     K = word × Wk     V = word × Wv',
+    diagram: [
+      { label:'Q (Query)', desc:'"What am I looking for?"', val:'[0.3, -0.8, 0.5, ...]', color:'var(--purple)' },
+      { label:'K (Key)',   desc:'"What do I contain?"',     val:'[0.7, 0.2, -0.4, ...]', color:'var(--cyan)' },
+      { label:'V (Value)', desc:'"What info do I carry?"',  val:'[0.1, 0.9, 0.3, ...]',  color:'var(--green)' },
+    ]
+  },
+  {
+    title: 'Step 2 — Score: How much does each Q match each K?',
+    body: 'To find which words are related, we take the "it" Query and compare it against every word\'s Key using a dot product. A high score means "it" and that word are likely related.\n\n"it" Q × "animal" K = 0.94 (high! — they\'re related)\n"it" Q × "street" K = 0.12 (low — not related)',
+    formula: 'score(i,j) = Q_i · K_j    (dot product = similarity)',
+    diagram: [
+      { label:'"it" vs "animal"', desc:'High score — likely same thing', val:'score = 0.94', color:'var(--green)' },
+      { label:'"it" vs "street"', desc:'Low score — probably unrelated', val:'score = 0.12', color:'var(--faint)' },
+      { label:'"it" vs "tired"',  desc:'Medium — indirectly related',    val:'score = 0.61', color:'var(--amber)' },
+    ]
+  },
+  {
+    title: 'Step 3 — Softmax: Convert scores to probabilities',
+    body: 'Raw scores are fed through softmax, which turns them into percentages that add up to 100%. This tells the model how much to "focus" on each word. Very high scores become very large percentages; low scores become nearly 0%.',
+    formula: 'attention_weight = softmax(scores / √d_k)',
+    diagram: [
+      { label:'Attention to "animal"', desc:'84% focus on animal', val:'0.84', color:'var(--green)' },
+      { label:'Attention to "tired"',  desc:'9% focus on tired',  val:'0.09', color:'var(--amber)' },
+      { label:'Attention to others',   desc:'Remaining 7%',        val:'0.07', color:'var(--faint)' },
+    ]
+  },
+  {
+    title: 'Step 4 — Weighted Sum: Blend the Values',
+    body: 'Now we multiply each Value vector by its attention weight and add them all together. "it" gets 84% of animal\'s info, 9% of tired\'s info, and small amounts from others. The result is a new vector for "it" that\'s enriched with context!',
+    formula: 'output = Σ (attention_weight_j × V_j)  for all j',
+    diagram: [
+      { label:'84% × animal\'s V', desc:'Main contribution', val:'[0.74, 0.78, ...]', color:'var(--green)' },
+      { label:'9% × tired\'s V',   desc:'Secondary',         val:'[0.07, 0.08, ...]', color:'var(--amber)' },
+      { label:'Final output',      desc:'Contextual vector for "it"', val:'[0.81, 0.86, ...]', color:'var(--purple)' },
+    ]
+  },
+  {
+    title: 'Step 5 — Multi-Head: Run it many times in parallel',
+    body: 'Real models run attention many times in parallel, each with different Q, K, V matrices. Each "head" can learn different types of relationships:\n• Head 1 might learn: pronoun → antecedent ("it" → "animal")\n• Head 2 might learn: verb → subject ("cross" → "animal")\n• Head 3 might learn: adjective → noun ("tired" → "animal")\nAll heads\' outputs are concatenated and projected.',
+    formula: 'MultiHead = Concat(head₁, ..., headₙ) × Wₒ',
+    diagram: [
+      { label:'Head 1', desc:'Pronoun reference', val:'it → animal', color:'var(--purple)' },
+      { label:'Head 2', desc:'Subject-verb',      val:'animal → cross', color:'var(--cyan)' },
+      { label:'Head 3', desc:'Modifier',          val:'tired → animal', color:'var(--green)' },
+    ]
+  }
+];
+
+function resetQKV() {
+  qkvStep = 0;
+  document.getElementById('qkv-counter').textContent = 'Step 0 / ' + QKV_STEPS.length;
+  document.getElementById('btn-step-qkv').disabled = false;
+  document.getElementById('qkv-diagram').innerHTML = '';
+  document.getElementById('qkv-formula').textContent = 'Formula will appear here';
+  document.getElementById('exp-step').textContent = 'Query, Key, Value — the 3 roles of attention';
+  document.getElementById('exp-text').textContent = 'Every word in a sentence plays 3 roles at once: it asks a question (Query), it answers questions from other words (Key), and it carries information (Value). The attention mechanism uses these 3 roles to figure out which words are connected. Click "step" to see how it works.';
+  document.getElementById('exp-tags').innerHTML = '';
+  document.getElementById('stage-progress').textContent = 'Ready — click "step" to begin';
+}
+
+function stepQKV() {
+  if (qkvStep >= QKV_STEPS.length) return;
+  var s = QKV_STEPS[qkvStep];
+
+  var diagHtml = '';
+  s.diagram.forEach(function(d) {
+    diagHtml += '<div class="qkv-box" style="border-color:'+d.color+'22;">';
+    diagHtml += '<div class="qkv-label" style="color:'+d.color+';">'+d.label+'</div>';
+    diagHtml += '<div style="font-family:var(--mono);font-size:11px;color:var(--faint);margin-bottom:6px;">'+d.desc+'</div>';
+    diagHtml += '<div class="qkv-vec"><span style="background:'+d.color+'20;color:'+d.color+';border-radius:3px;padding:2px 6px;">'+d.val+'</span></div>';
+    diagHtml += '</div>';
+  });
+  document.getElementById('qkv-diagram').innerHTML = diagHtml;
+  document.getElementById('qkv-formula').textContent = s.formula;
+
+  document.getElementById('exp-step').textContent = s.title;
+  document.getElementById('exp-text').textContent = s.body;
+  document.getElementById('stage-progress').textContent = s.title;
+
+  qkvStep++;
+  document.getElementById('qkv-counter').textContent = 'Step ' + qkvStep + ' / ' + QKV_STEPS.length;
+  if (qkvStep >= QKV_STEPS.length) {
+    document.getElementById('btn-step-qkv').disabled = true;
+    document.getElementById('stage-progress').textContent = 'Attention walkthrough complete ✓';
+  }
+}
+
+function playQKV() {
+  resetQKV();
+  var i = 0;
+  function next() { if (i < QKV_STEPS.length) { stepQKV(); i++; setTimeout(next, 900); } }
+  setTimeout(next, 300);
+}
+
+buildVisual();
+document.getElementById('exp-step').textContent = 'What is Attention?';
+document.getElementById('exp-text').textContent = 'Attention is how an AI model figures out which words are most important when reading a sentence. When you read "The animal didn\'t cross the street because it was too tired" — you know "it" refers to "animal", not "street". Click the word "it" above to see the AI make that exact same connection!';
+document.getElementById('stage-progress').textContent = 'Click any word to see how it attends to others';
+</script>
+<script>(function(){var c=document.getElementById('ai-canvas'),x=c.getContext('2d'),w,h,cols,drops;function r(){w=c.width=window.innerWidth;h=c.height=window.innerHeight;cols=Math.floor(w/16);drops=new Array(cols).fill(0).map(function(){return Math.floor(Math.random()*-60);});}r();window.addEventListener('resize',r);var f=0;function d(){f++;requestAnimationFrame(d);if(f%5!==0)return;x.fillStyle='rgba(6,1,15,0.1)';x.fillRect(0,0,w,h);x.font='12px JetBrains Mono,monospace';for(var i=0;i<cols;i++){x.fillStyle=Math.random()>.96?'rgba(244,114,182,0.2)':'rgba(244,114,182,0.04)';x.fillText(Math.random()>.5?'Q':'K',i*16,drops[i]*16);if(drops[i]*16>h&&Math.random()>.975)drops[i]=0;else drops[i]++;}}requestAnimationFrame(d);})();</script>
+<script src="../js/main.js"></script>
+</body>
+</html>

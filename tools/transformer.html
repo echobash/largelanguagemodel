@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Transformer Architecture — llm-kit</title>
+  <link rel="stylesheet" href="../css/main.css" />
+  <style>
+    .tx-diagram { display:flex; align-items:flex-start; gap:24px; min-height:500px; }
+    .tx-column { display:flex; flex-direction:column; align-items:center; gap:0; flex:0 0 180px; }
+    .tx-block {
+      width:100%; border:2px solid var(--border2); border-radius:var(--r-lg);
+      padding:12px 14px; font-family:var(--mono); font-size:12px; text-align:center;
+      background:var(--bg2); transition:all .4s;
+      opacity:0; transform:scale(.9);
+    }
+    .tx-block.show { opacity:1; transform:scale(1); }
+    .tx-block.active {
+      border-color:rgba(167,139,250,.6);
+      background:rgba(167,139,250,.08);
+      box-shadow:0 0 20px rgba(167,139,250,.15);
+    }
+    .tx-block-label { font-size:9px; text-transform:uppercase; letter-spacing:.1em; color:var(--faint); margin-bottom:4px; }
+    .tx-block-name { font-weight:700; font-size:13px; }
+    .tx-block-sub { font-size:10px; color:var(--muted); margin-top:3px; }
+    .tx-connector {
+      width:2px; height:20px;
+      background:repeating-linear-gradient(to bottom, rgba(255,255,255,.15) 0px, rgba(255,255,255,.15) 4px, transparent 4px, transparent 9px);
+      margin:0 auto;
+    }
+    .tx-detail {
+      flex:1; background:var(--bg2); border:1px solid var(--border2);
+      border-radius:var(--r-xl); padding:20px; font-family:var(--mono);
+    }
+    .tx-detail-title { font-size:14px; font-weight:700; color:var(--purple); margin-bottom:12px; }
+    .tx-detail-body  { font-size:12px; color:var(--muted); line-height:1.8; }
+    .tx-formula {
+      margin-top:12px; padding:10px 14px; background:rgba(0,0,0,.3);
+      border-radius:var(--r-md); border:1px solid var(--border);
+      font-size:12px; color:var(--cyan); letter-spacing:.04em; line-height:1.8;
+    }
+
+    .repeat-badge {
+      display:flex; align-items:center; justify-content:center;
+      width:100%; padding:8px 0; font-family:var(--mono); font-size:11px;
+      color:var(--faint); border:1px dashed rgba(255,255,255,.12);
+      border-radius:var(--r-md); margin:4px 0;
+    }
+  </style>
+</head>
+<body>
+<canvas id="ai-canvas" style="opacity:.2;"></canvas>
+<div class="grid-bg"></div>
+<div class="blob blob-1" style="opacity:.3;"></div>
+
+<nav class="nav scrolled">
+  <a class="nav-brand" href="../index.html"><span class="nav-brand-name">llm-kit</span><span class="nav-brand-by">@echobash</span></a>
+  <ul class="nav-links">
+    <li><a href="../index.html">home</a></li>
+    <li><a href="llm.html">llm</a></li>
+    <li><a href="attention.html">attention</a></li>
+    <li><a href="transformer.html" class="active">transformer</a></li>
+    <li><a href="glossary.html">glossary</a></li>
+  </ul>
+</nav>
+
+<div class="tool-wrap">
+  <div class="tool-title">transformer_arch</div>
+  <div class="tool-sub">// The building block of every modern AI — how it's structured inside</div>
+
+  <div style="background:rgba(56,189,248,.06);border:1px solid rgba(56,189,248,.2);border-radius:var(--r-lg);padding:14px 18px;margin-bottom:24px;font-family:var(--mono);font-size:13px;color:var(--muted);line-height:1.7;">
+    💡 <strong style="color:var(--cyan);">The core idea:</strong> Every AI you use — ChatGPT, Claude, Gemini, Llama — is built on the "transformer" architecture invented in 2017. Think of it as an assembly line: your text goes in one end, gets processed by many specialized stations, and a prediction comes out the other end. Click "step" to visit each station.
+  </div>
+
+  <div class="mode-tabs">
+    <button class="mode-tab active" id="tab-dec" onclick="setMode('decoder')">Decoder-Only (GPT style)</button>
+    <button class="mode-tab" id="tab-enc" onclick="setMode('encoder')">Encoder-Only (BERT style)</button>
+  </div>
+
+  <div class="ctrl-row">
+    <button class="step-btn" id="btn-step" onclick="step()">step →</button>
+    <button class="play-btn" onclick="playAll()">▶ play all</button>
+    <button class="reset-btn" onclick="reset()">↺ reset</button>
+    <span style="font-family:var(--mono);font-size:12px;color:var(--faint);margin-left:4px;" id="step-counter">Step 0 / 0</span>
+  </div>
+
+  <div class="stage">
+    <div class="stage-bar">
+      <div class="stage-bar-left"><span class="wp wp-r"></span><span class="wp wp-y"></span><span class="wp wp-g"></span></div>
+      <span class="stage-progress" id="stage-progress">Ready — click "step" to begin</span>
+    </div>
+    <div class="stage-body">
+      <div class="tx-diagram">
+        <div class="tx-column" id="tx-col"></div>
+        <div class="tx-detail" id="tx-detail">
+          <div class="tx-detail-title" id="td-title">Select a step</div>
+          <div class="tx-detail-body" id="td-body">Click "step" or a block to learn about each component of the transformer architecture.</div>
+          <div class="tx-formula" id="td-formula" style="display:none;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="explain-panel">
+    <div class="explain-step" id="exp-step">Transformer Architecture</div>
+    <div class="explain-text" id="exp-text">The transformer (Vaswani et al., 2017) replaced RNNs with attention. GPT-style models use a decoder-only stack: each token can only attend to previous tokens (causal masking). BERT uses encoder-only: bidirectional attention to understand text.</div>
+    <div class="explain-tags" id="exp-tags"></div>
+  </div>
+</div><!-- ── Also by echobash strip ── -->
+<div class="also-strip">
+  <div class="also-inner">
+    <span class="also-label">also by echobash</span>
+    <div class="also-divider"></div>
+    <div class="also-links">
+      <a href="https://devdunia.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--cyan);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">devdunia</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">networking tools</span>
+      </a>
+      <a href="https://echobash.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--purple);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">echobash</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">portfolio</span>
+      </a>
+      <a href="https://promptflix.in" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--amber);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">promptflix</span><span class="also-link-tld">.in</span>
+        <span class="also-link-sub">prompt library</span>
+      </a>
+    </div>
+  </div>
+</div>
+<footer class="footer">
+  <p>built by echobash &nbsp;·&nbsp; <a href="https://devdunia.com" target="_blank" rel="noopener">devdunia.com</a> &nbsp;·&nbsp; <a href="https://echobash.com" target="_blank" rel="noopener">echobash.com</a> &nbsp;·&nbsp; <a href="https://promptflix.in" target="_blank" rel="noopener">promptflix.in</a></p>
+  <p style="margin-top:4px;">llm-kit is open source — AI tools for everyone</p>
+</footer>
+
+<script>
+var mode = 'decoder', currentStep = 0;
+
+var DECODER_STEPS = [
+  { id:'input',  label:'INPUT',        name:'Token IDs',        sub:'[464, 3797, …]',       color:'var(--purple)', formula:'',
+    title:'Token IDs', body:'Raw text is tokenized into integer IDs. "The cat" → [464, 3797]. These IDs are indices into the embedding matrix. Input shape: [batch, seq_len].', fml:'' },
+  { id:'embed',  label:'LAYER',        name:'Token Embedding',  sub:'d_model=4096',          color:'var(--cyan)',   formula:'',
+    title:'Token + Position Embedding', body:'Each token ID is looked up in an embedding matrix E of shape [vocab_size, d_model]. A positional encoding (RoPE or learned) is added so the model knows token order. Output: [batch, seq_len, d_model].', fml:'x = E[token_id] + pos_enc(position)' },
+  { id:'norm1',  label:'LAYER',        name:'RMS Norm',         sub:'pre-normalization',     color:'var(--faint)',  formula:'',
+    title:'Pre-Attention RMSNorm', body:'Modern LLMs (Llama, Mistral) use RMSNorm before attention instead of LayerNorm. This stabilizes training without mean centering. It scales activations to unit RMS.', fml:'RMSNorm(x) = x / RMS(x) · γ' },
+  { id:'attn',   label:'LAYER',        name:'Masked Self-Attn', sub:'causal (GPT)',          color:'var(--purple)', formula:'',
+    title:'Causal Multi-Head Attention', body:'Each token attends to all preceding tokens (including itself) but NOT future tokens — enforced by a causal mask. Multiple attention heads run in parallel, each learning different relationships. Output is projected back to d_model.', fml:'Attn(Q,K,V) = softmax(QKᵀ/√dₖ + mask) · V' },
+  { id:'res1',   label:'RESIDUAL',     name:'Add (Residual)',   sub:'x = x + attn(x)',      color:'var(--faint)',  formula:'',
+    title:'Residual Connection', body:'The attention output is added back to the input (skip connection). This lets gradients flow directly to early layers and prevents the vanishing gradient problem. Without residuals, deep transformers could not be trained.', fml:'x = x + Attention(RMSNorm(x))' },
+  { id:'norm2',  label:'LAYER',        name:'RMS Norm',         sub:'pre-FFN',              color:'var(--faint)',  formula:'',
+    title:'Pre-FFN RMSNorm', body:'Another normalization before the feed-forward network. The pattern Pre-Norm (normalize before sublayer) has replaced Post-Norm in most modern LLMs because it trains more stably at scale.', fml:'RMSNorm(x) = x / RMS(x) · γ' },
+  { id:'ffn',    label:'LAYER',        name:'Feed-Forward',     sub:'4×d_model, SwiGLU',    color:'var(--green)',  formula:'',
+    title:'Feed-Forward Network (FFN)', body:'A 2-layer MLP with an expansion ratio of 4× (so 4096→16384→4096). Modern models use SwiGLU activation instead of ReLU, which improves performance. The FFN is where "knowledge" is stored — 2/3 of parameters live here.', fml:'FFN(x) = SwiGLU(xW₁, xW₃) · W₂' },
+  { id:'res2',   label:'RESIDUAL',     name:'Add (Residual)',   sub:'x = x + ffn(x)',       color:'var(--faint)',  formula:'',
+    title:'Residual Connection (FFN)', body:'Again, the FFN output is added back to its input. This is the second residual in each transformer layer. After this, the same pattern (Norm → Attn → Add, Norm → FFN → Add) repeats for N layers.', fml:'x = x + FFN(RMSNorm(x))' },
+  { id:'repeat', label:'×N LAYERS',   name:'Repeat N Times',   sub:'e.g. 32 layers',       color:'var(--amber)',  formula:'',
+    title:'Stacked Transformer Layers', body:'The Norm→Attn→Add→Norm→FFN→Add block repeats N times. More layers = more capacity. Llama-7B: 32 layers. GPT-3: 96 layers. Each layer refines the representation, with earlier layers handling syntax and later layers semantics.', fml:'hₙ = TransformerLayer(hₙ₋₁)' },
+  { id:'lmhead', label:'OUTPUT',       name:'LM Head',          sub:'d_model → vocab',     color:'var(--cyan)',   formula:'',
+    title:'Language Model Head', body:'The final hidden state of the last token is projected back to vocabulary size via an unembedding matrix (often tied to the input embedding). The result is logits — raw scores for each token in the vocabulary.', fml:'logits = h · Eᵀ   (shape: [vocab_size])' },
+  { id:'sample', label:'OUTPUT',       name:'Softmax + Sample', sub:'next token →',         color:'var(--green)',  formula:'',
+    title:'Softmax & Token Sampling', body:'Softmax converts logits to probabilities. The next token is sampled according to temperature, top-p, and top-k settings. The sampled token is appended to the context, and the entire forward pass runs again for the next token.', fml:'p(token) = exp(logit/T) / Σ exp(logits/T)' },
+];
+
+var ENCODER_STEPS = [
+  { id:'input',  label:'INPUT',  name:'Token IDs',          sub:'[CLS, tok…, SEP]', color:'var(--cyan)',   title:'Token IDs + Special Tokens', body:'BERT adds special tokens: [CLS] at start (used for classification), [SEP] between sentences. Some input tokens are replaced with [MASK] during training.', fml:'' },
+  { id:'embed',  label:'LAYER',  name:'Embedding',           sub:'token+pos+seg',    color:'var(--purple)', title:'Three Embeddings', body:'BERT sums three embeddings: token embedding, positional embedding (learned, not RoPE), and segment embedding (sentence A vs B). Output: [batch, seq_len, 768].', fml:'x = E_tok + E_pos + E_seg' },
+  { id:'attn',   label:'LAYER',  name:'Bidirectional Attn',  sub:'full self-attn',   color:'var(--purple)', title:'Bidirectional Self-Attention', body:'Unlike GPT, BERT has NO causal mask — every token can attend to every other token in both directions. This makes BERT much better at understanding than generation.', fml:'Attn(Q,K,V) = softmax(QKᵀ/√dₖ) · V  (no mask)' },
+  { id:'res1',   label:'LAYER',  name:'Add + LayerNorm',     sub:'post-norm',        color:'var(--faint)',  title:'Post-Norm Residual', body:'BERT uses Post-Norm (add residual then normalize), while modern LLMs use Pre-Norm. Both prevent gradient issues but Post-Norm can be harder to train at very large scale.', fml:'x = LayerNorm(x + Attention(x))' },
+  { id:'ffn',    label:'LAYER',  name:'Feed-Forward',        sub:'3072 hidden, GELU',color:'var(--green)',  title:'FFN with GELU', body:'BERT\'s FFN uses GELU activation (smoother than ReLU). Hidden size is 3072 (4× 768). The FFN refines token representations after attention mixes information between tokens.', fml:'FFN(x) = GELU(xW₁ + b₁)W₂ + b₂' },
+  { id:'res2',   label:'LAYER',  name:'Add + LayerNorm',     sub:'post-norm',        color:'var(--faint)',  title:'Second Post-Norm Residual', body:'Same as before — residual + LayerNorm after the FFN. This completes one BERT transformer layer. BERT-base has 12 layers; BERT-large has 24.', fml:'x = LayerNorm(x + FFN(x))' },
+  { id:'repeat', label:'×12',    name:'Repeat 12×',          sub:'BERT-base',        color:'var(--amber)',  title:'Stacked BERT Layers', body:'BERT-base stacks 12 layers. All 12 process the full sequence with bidirectional attention. Final hidden states represent deeply contextual token embeddings used for downstream tasks.', fml:'hₙ = BERTLayer(hₙ₋₁)' },
+  { id:'cls',    label:'OUTPUT', name:'[CLS] Token Head',    sub:'classification',   color:'var(--pink)',   title:'[CLS] Output for Classification', body:'The final hidden state of the [CLS] token is used for sentence-level tasks (e.g. sentiment). For token-level tasks (NER, QA), all token hidden states are used.', fml:'y = Linear(h_[CLS])' },
+];
+
+var steps, maxSteps;
+
+function setMode(m) {
+  mode = m;
+  document.getElementById('tab-dec').classList.toggle('active', m === 'decoder');
+  document.getElementById('tab-enc').classList.toggle('active', m === 'encoder');
+  reset();
+}
+
+function reset() {
+  currentStep = 0;
+  steps = mode === 'decoder' ? DECODER_STEPS : ENCODER_STEPS;
+  maxSteps = steps.length;
+  document.getElementById('step-counter').textContent = 'Step 0 / ' + maxSteps;
+  document.getElementById('btn-step').disabled = false;
+  document.getElementById('stage-progress').textContent = 'Ready — click "step" to begin';
+  renderColumn();
+  document.getElementById('td-title').textContent = mode === 'decoder' ? 'Decoder-Only Transformer' : 'Encoder-Only Transformer';
+  document.getElementById('td-body').textContent = mode === 'decoder'
+    ? 'GPT-style models use a decoder-only transformer. Each token can only see previous tokens (causal masking). Used for generation. Click "step" to walk through each component.'
+    : 'BERT-style models use bidirectional attention — every token sees every other token. Better for understanding tasks. Click "step" to explore each layer.';
+  document.getElementById('td-formula').style.display = 'none';
+
+  document.getElementById('exp-step').textContent = mode === 'decoder' ? 'Decoder-Only Transformer (GPT)' : 'Encoder-Only Transformer (BERT)';
+  document.getElementById('exp-text').textContent = mode === 'decoder'
+    ? 'GPT and Llama use decoder-only transformers with causal masking. They predict the next token autoregressively. "Attention is All You Need" (2017) introduced this architecture that now powers most LLMs.'
+    : 'BERT (2018) uses bidirectional encoder representations — the model sees the full sequence at once. It\'s trained with masked language modeling (predict masked tokens). Excellent for NLU tasks like classification and QA.';
+  document.getElementById('exp-tags').innerHTML = mode === 'decoder'
+    ? '<span class="tag tag-p">CAUSAL MASK</span><span class="tag tag-c">AUTOREGRESSIVE</span><span class="tag tag-g">GPT · LLAMA · MISTRAL</span>'
+    : '<span class="tag tag-c">BIDIRECTIONAL</span><span class="tag tag-g">MLM</span><span class="tag tag-a">BERT · RoBERTa · DeBERTa</span>';
+}
+
+function renderColumn() {
+  var html = '';
+  steps.forEach(function(s, i) {
+    if (s.id === 'repeat') {
+      html += '<div class="tx-connector"></div>';
+      html += '<div class="repeat-badge" id="pipe-'+i+'" style="opacity:0;">⟳ '+s.name+' ('+s.sub+')</div>';
+      html += '<div class="tx-connector"></div>';
+    } else {
+      html += '<div class="tx-connector" style="'+(i===0?'display:none':'')+'"></div>';
+      html += '<div class="tx-block" id="pipe-'+i+'">';
+      html += '<div class="tx-block-label">'+s.label+'</div>';
+      html += '<div class="tx-block-name" style="color:'+s.color+';">'+s.name+'</div>';
+      html += '<div class="tx-block-sub">'+s.sub+'</div>';
+      html += '</div>';
+    }
+  });
+  document.getElementById('tx-col').innerHTML = html;
+}
+
+function step() {
+  if (currentStep >= maxSteps) return;
+  var s = steps[currentStep];
+
+  document.querySelectorAll('.tx-block, .repeat-badge').forEach(function(el) { el.classList.remove('active'); });
+
+  var el = document.getElementById('pipe-' + currentStep);
+  if (el) {
+    el.style.opacity = '1';
+    el.style.transform = 'scale(1)';
+    el.classList.add('active', 'show');
+  }
+
+  document.getElementById('td-title').textContent = s.title;
+  document.getElementById('td-body').textContent = s.body;
+  if (s.fml) {
+    document.getElementById('td-formula').style.display = '';
+    document.getElementById('td-formula').textContent = s.fml;
+  } else {
+    document.getElementById('td-formula').style.display = 'none';
+  }
+
+  document.getElementById('stage-progress').textContent = 'Step '+(currentStep+1)+': '+s.name;
+  currentStep++;
+  document.getElementById('step-counter').textContent = 'Step ' + currentStep + ' / ' + maxSteps;
+  if (currentStep >= maxSteps) {
+    document.getElementById('btn-step').disabled = true;
+    document.getElementById('stage-progress').textContent = 'Architecture walkthrough complete ✓';
+  }
+}
+
+function playAll() {
+  reset();
+  var i = 0;
+  function next() { if (i < maxSteps) { step(); i++; setTimeout(next, 700); } }
+  setTimeout(next, 300);
+}
+
+reset();
+</script>
+<script>(function(){var c=document.getElementById('ai-canvas'),x=c.getContext('2d'),w,h,cols,drops,CH='∑∇∂∫λσμαβ';function r(){w=c.width=window.innerWidth;h=c.height=window.innerHeight;cols=Math.floor(w/16);drops=new Array(cols).fill(0).map(function(){return Math.floor(Math.random()*-60);});}r();window.addEventListener('resize',r);var f=0;function d(){f++;requestAnimationFrame(d);if(f%5!==0)return;x.fillStyle='rgba(6,1,15,0.1)';x.fillRect(0,0,w,h);x.font='12px JetBrains Mono,monospace';for(var i=0;i<cols;i++){x.fillStyle=Math.random()>.95?'rgba(56,189,248,0.25)':'rgba(56,189,248,0.05)';x.fillText(CH[Math.floor(Math.random()*CH.length)],i*16,drops[i]*16);if(drops[i]*16>h&&Math.random()>.975)drops[i]=0;else drops[i]++;}}requestAnimationFrame(d);})();</script>
+<script src="../js/main.js"></script>
+</body>
+</html>

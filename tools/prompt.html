@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Prompt Engineering — llm-kit</title>
+  <link rel="stylesheet" href="../css/main.css" />
+  <style>
+    .prompt-compare { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin:16px 0; }
+    @media(max-width:600px){ .prompt-compare{grid-template-columns:1fr;} }
+    .prompt-box { background:var(--bg2); border:2px solid var(--border2); border-radius:var(--r-lg); padding:14px 16px; font-family:var(--mono); font-size:12px; }
+    .prompt-box.bad  { border-color:rgba(248,113,113,.3); }
+    .prompt-box.good { border-color:rgba(74,222,128,.3); }
+    .prompt-box-label { font-size:10px; text-transform:uppercase; letter-spacing:.1em; margin-bottom:8px; }
+    .prompt-box-text  { color:var(--muted); line-height:1.7; }
+    .prompt-box-result { margin-top:10px; padding:8px 12px; border-radius:var(--r-sm); font-size:11px; line-height:1.6; }
+    .prompt-box.bad .prompt-box-result  { background:rgba(248,113,113,.06); border:1px solid rgba(248,113,113,.15); color:#ff9aa3; }
+    .prompt-box.good .prompt-box-result { background:rgba(74,222,128,.06); border:1px solid rgba(74,222,128,.2); color:#9fffd4; }
+
+    .pattern-card { background:var(--bg2); border:1px solid var(--border2); border-radius:var(--r-xl); padding:18px 20px; margin-bottom:14px; }
+    .pattern-name { font-family:var(--mono); font-size:15px; font-weight:700; margin-bottom:6px; }
+    .pattern-desc { font-family:var(--mono); font-size:12px; color:var(--muted); margin-bottom:12px; line-height:1.6; }
+    .pattern-example { background:rgba(0,0,0,.3); border-radius:var(--r-md); padding:12px 14px; font-family:var(--mono); font-size:12px; line-height:1.7; border:1px solid var(--border); }
+    .pe-role    { color:var(--purple); }
+    .pe-user    { color:var(--cyan); }
+    .pe-ai      { color:var(--green); }
+    .pe-example { color:var(--amber); }
+
+    .pattern-tabs { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:16px; }
+    .pat-tab { padding:6px 14px; border-radius:var(--r-md); font-family:var(--mono); font-size:12px; border:1px solid var(--border2); color:var(--faint); background:transparent; cursor:pointer; transition:all .15s; }
+    .pat-tab.active { border-color:rgba(167,139,250,.4); background:rgba(167,139,250,.1); color:var(--purple); }
+    .pat-tab:hover:not(.active) { background:rgba(255,255,255,.04); }
+  </style>
+</head>
+<body>
+<canvas id="ai-canvas" style="opacity:.15;"></canvas>
+<div class="grid-bg"></div>
+<div class="blob blob-1" style="opacity:.25;"></div>
+<nav class="nav scrolled">
+  <a class="nav-brand" href="../index.html"><span class="nav-brand-name">llm-kit</span><span class="nav-brand-by">@echobash</span></a>
+  <ul class="nav-links">
+    <li><a href="../index.html">home</a></li>
+    <li><a href="few-shot.html">few-shot</a></li>
+    <li><a href="cot.html">chain of thought</a></li>
+    <li><a href="prompt.html" class="active">prompts</a></li>
+  </ul>
+</nav>
+<div class="tool-wrap">
+  <div class="tool-title">prompt_engineering</div>
+  <div class="tool-sub">// How to talk to AI so it actually understands what you want</div>
+
+  <div style="background:rgba(167,139,250,.06);border:1px solid rgba(167,139,250,.2);border-radius:var(--r-lg);padding:14px 18px;margin-bottom:24px;font-family:var(--mono);font-size:13px;color:var(--muted);line-height:1.7;">
+    💡 <strong style="color:var(--purple);">The core idea:</strong> AI is not magic — it responds exactly to how you ask. "Write a poem" gives generic results. "Write a 4-line rhyming poem about coffee from the perspective of someone who forgot their morning cup" gives something great. Prompt engineering is the skill of writing clear, specific instructions that get you the output you actually want.
+  </div>
+
+  <div class="mode-tabs">
+    <button class="mode-tab active" id="tab-compare" onclick="setMode('compare')">Bad vs Good Prompts</button>
+    <button class="mode-tab" id="tab-patterns" onclick="setMode('patterns')">Prompt Patterns</button>
+    <button class="mode-tab" id="tab-structure" onclick="setMode('structure')">Prompt Structure</button>
+  </div>
+
+  <div class="stage">
+    <div class="stage-bar">
+      <div class="stage-bar-left"><span class="wp wp-r"></span><span class="wp wp-y"></span><span class="wp wp-g"></span></div>
+      <span class="stage-progress" id="stage-progress">Compare prompts and see the difference</span>
+    </div>
+    <div class="stage-body" id="stage-body">
+
+      <div id="mode-compare">
+        <div id="compare-content"></div>
+      </div>
+
+      <div id="mode-patterns" style="display:none;">
+        <div class="pattern-tabs" id="pattern-tabs"></div>
+        <div id="pattern-content"></div>
+      </div>
+
+      <div id="mode-structure" style="display:none;">
+        <div id="structure-content"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="explain-panel">
+    <div class="explain-step" id="exp-step">Prompt Engineering</div>
+    <div class="explain-text" id="exp-text">A prompt is your instruction to the AI. The more specific and structured your prompt, the better the output. The difference between a bad and a great AI response is usually the quality of the prompt, not the AI model. Learning to write good prompts is one of the most valuable skills you can develop when working with AI.</div>
+    <div class="explain-tags" id="exp-tags"><span class="tag tag-p">BE SPECIFIC</span><span class="tag tag-c">GIVE CONTEXT</span><span class="tag tag-g">SHOW EXAMPLES</span></div>
+  </div>
+</div><!-- ── Also by echobash strip ── -->
+<div class="also-strip">
+  <div class="also-inner">
+    <span class="also-label">also by echobash</span>
+    <div class="also-divider"></div>
+    <div class="also-links">
+      <a href="https://devdunia.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--cyan);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">devdunia</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">networking tools</span>
+      </a>
+      <a href="https://echobash.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--purple);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">echobash</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">portfolio</span>
+      </a>
+      <a href="https://promptflix.in" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--amber);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">promptflix</span><span class="also-link-tld">.in</span>
+        <span class="also-link-sub">prompt library</span>
+      </a>
+    </div>
+  </div>
+</div>
+<footer class="footer">
+  <p>built by echobash &nbsp;·&nbsp; <a href="https://devdunia.com" target="_blank" rel="noopener">devdunia.com</a> &nbsp;·&nbsp; <a href="https://echobash.com" target="_blank" rel="noopener">echobash.com</a> &nbsp;·&nbsp; <a href="https://promptflix.in" target="_blank" rel="noopener">promptflix.in</a></p>
+  <p style="margin-top:4px;">llm-kit is open source — AI tools for everyone</p>
+</footer>
+<script>
+var mode = 'compare';
+
+var COMPARISONS = [
+  {
+    task:'Summarization',
+    bad:  { label:'❌ Vague Prompt', text:'Summarize this article.', result:'Here is a summary of the article: The article discusses various topics including... [generic, padded summary]' },
+    good: { label:'✅ Specific Prompt', text:'Summarize this article in 3 bullet points for a non-technical audience. Focus on the key takeaways, not the technical details. Keep each bullet under 20 words.', result:'• AI models now write code better than most junior developers\n• The main safety concern is AI giving confident but wrong answers\n• Companies are starting to require AI literacy for new hires' }
+  },
+  {
+    task:'Code Help',
+    bad:  { label:'❌ Vague Prompt', text:'Fix my code.', result:'I\'d be happy to help fix your code! Could you please share the code you\'d like me to fix?' },
+    good: { label:'✅ Specific Prompt', text:'This Python function should return the sum of even numbers in a list, but it returns the wrong answer. Here\'s the code: [code]. The error is: it returns 0 for [1,2,3,4]. Fix it and explain why it was wrong.', result:'The bug is on line 3: `if num % 2 = 0` should be `if num % 2 == 0` (assignment vs comparison). Fixed version: [corrected code]. The `=` operator assigns a value; `==` checks equality.' }
+  },
+  {
+    task:'Creative Writing',
+    bad:  { label:'❌ Vague Prompt', text:'Write a story.', result:'Once upon a time, there was a young hero who went on an adventure and learned valuable lessons about courage and friendship...' },
+    good: { label:'✅ Specific Prompt', text:'Write a 200-word horror story set in a modern coffee shop. The twist: the barista already knows the customer\'s order before they speak. Written in second person. No violence — only psychological dread.', result:'"You push open the door of the café. The barista looks up before the bell stops ringing. She\'s already holding your cup..." [genuinely creepy, specific story]' }
+  },
+  {
+    task:'Analysis',
+    bad:  { label:'❌ Vague Prompt', text:'Is this a good investment?', result:'Whether this is a good investment depends on many factors including your risk tolerance, time horizon, financial goals...' },
+    good: { label:'✅ Specific Prompt', text:'I\'m 28, have $10k to invest, and won\'t need this money for 10 years. I already have an emergency fund. Analyze Tesla stock as an investment. Give me: (1) bull case in 2 sentences, (2) bear case in 2 sentences, (3) your assessment of risk level 1-10, (4) one alternative to consider.', result:'Bull: EV market still growing, Tesla has best brand + charging network. Bear: competition is catching up, margins under pressure. Risk: 7/10. Alternative: Consider VT (global index ETF) for less volatility.' }
+  }
+];
+
+var PATTERNS = [
+  {
+    name:'Role Prompting', color:'var(--purple)',
+    desc:'Tell the AI who to pretend to be. This primes it to use domain-specific knowledge and appropriate tone.',
+    example: '<span class="pe-role">System: You are a senior Python developer with 10 years of experience in data engineering. You explain things clearly to junior developers without being condescending.</span>\n\n<span class="pe-user">User: What is the difference between a list and a tuple?</span>'
+  },
+  {
+    name:'Chain of Thought', color:'var(--cyan)',
+    desc:'Ask the AI to "think step by step" before answering. This dramatically improves accuracy on math and logic problems.',
+    example: '<span class="pe-user">User: A train leaves Chicago at 9am going 60mph. Another leaves New York at 10am going 80mph. The cities are 800 miles apart. When do they meet?\n\nThink step by step, show your work, then give the final answer.</span>'
+  },
+  {
+    name:'Few-Shot Examples', color:'var(--green)',
+    desc:'Show the AI examples of what you want before asking your question. The more examples, the more it learns your pattern.',
+    example: '<span class="pe-user">User: Classify the sentiment as POSITIVE, NEGATIVE, or NEUTRAL.\n\n</span><span class="pe-example">Example: "The food was amazing" → POSITIVE\nExample: "The service was slow" → NEGATIVE\nExample: "The restaurant is on Main Street" → NEUTRAL\n\n</span><span class="pe-user">Now classify: "I waited 45 minutes for my order" →</span>'
+  },
+  {
+    name:'Output Format Control', color:'var(--amber)',
+    desc:'Specify exactly what format you want the output in. JSON, markdown, bullet points, tables — AI follows format instructions very well.',
+    example: '<span class="pe-user">User: Give me 3 ideas for a birthday party for a 10-year-old.\n\nRespond in this exact JSON format:\n{"ideas": [{"name": "...", "cost": "$XX", "difficulty": "easy/medium/hard"}]}</span>'
+  },
+  {
+    name:'Persona + Constraint', color:'var(--pink)',
+    desc:'Combine a role with specific constraints. This gives very focused, useful outputs.',
+    example: '<span class="pe-role">You are a doctor explaining medical concepts to patients with no medical background. Use no jargon. Never say "consult a professional" (I know, that\'s assumed). Keep explanations under 3 sentences.</span>\n\n<span class="pe-user">User: What is hypertension?</span>'
+  }
+];
+
+var STRUCTURE = {
+  title:'Anatomy of a Great Prompt',
+  sections: [
+    { part:'System Prompt (optional)', color:'var(--purple)', desc:'Sets the AI\'s role, tone, and rules. Applied to every message in the conversation.', ex:'You are a concise assistant. Always respond in bullet points. Never write more than 5 bullets.' },
+    { part:'Context', color:'var(--cyan)', desc:'Background information the AI needs to understand your request.', ex:'I am building a Python web app using FastAPI. My users are small businesses with no technical staff.' },
+    { part:'Task', color:'var(--green)', desc:'The specific thing you want the AI to do. Be precise — use verbs like "list", "explain", "write", "compare", "fix".', ex:'Write a 3-step tutorial on how to connect my app to a Postgres database.' },
+    { part:'Format', color:'var(--amber)', desc:'How you want the output structured. Specifying format dramatically improves usability.', ex:'Format as numbered steps. Include a code example for each step. Use Python syntax.' },
+    { part:'Constraints', color:'var(--pink)', desc:'Limits to keep the response focused. "Keep it under 200 words", "no jargon", "don\'t include installation steps".', ex:'Assume the database is already running. No need to explain SQL basics. Under 300 words.' }
+  ]
+};
+
+function buildCompare() {
+  var html = '';
+  COMPARISONS.forEach(function(c) {
+    html += '<div style="margin-bottom:20px;"><div style="font-family:var(--mono);font-size:11px;color:var(--faint);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px;">'+c.task+'</div>';
+    html += '<div class="prompt-compare">';
+    html += '<div class="prompt-box bad"><div class="prompt-box-label" style="color:var(--red);">'+c.bad.label+'</div><div class="prompt-box-text">'+c.bad.text+'</div><div class="prompt-box-result">AI responds: '+c.bad.result+'</div></div>';
+    html += '<div class="prompt-box good"><div class="prompt-box-label" style="color:var(--green);">'+c.good.label+'</div><div class="prompt-box-text">'+c.good.text+'</div><div class="prompt-box-result">AI responds: '+c.good.result+'</div></div>';
+    html += '</div></div>';
+  });
+  document.getElementById('compare-content').innerHTML = html;
+}
+
+var selectedPattern = 0;
+function buildPatterns() {
+  var tabs = '';
+  PATTERNS.forEach(function(p, i) {
+    tabs += '<button class="pat-tab'+(i===selectedPattern?' active':'') +'" onclick="showPattern('+i+')">'+p.name+'</button>';
+  });
+  document.getElementById('pattern-tabs').innerHTML = tabs;
+  showPattern(selectedPattern, false);
+}
+
+function showPattern(i, updateTabs) {
+  if (updateTabs !== false) {
+    selectedPattern = i;
+    document.querySelectorAll('.pat-tab').forEach(function(t,j){t.classList.toggle('active',j===i);});
+  }
+  var p = PATTERNS[i];
+  document.getElementById('pattern-content').innerHTML =
+    '<div class="pattern-card" style="border-color:'+p.color+'33;">' +
+    '<div class="pattern-name" style="color:'+p.color+';">'+p.name+'</div>' +
+    '<div class="pattern-desc">'+p.desc+'</div>' +
+    '<div class="pattern-example">'+p.example.replace(/\n/g,'<br>')+'</div>' +
+    '</div>';
+}
+
+function buildStructure() {
+  var html = '<div style="font-family:var(--mono);font-size:13px;color:var(--muted);margin-bottom:16px;">'+STRUCTURE.title+'</div>';
+  STRUCTURE.sections.forEach(function(s) {
+    html += '<div style="display:flex;gap:14px;margin-bottom:14px;align-items:flex-start;">';
+    html += '<div style="flex:0 0 180px;padding:8px 14px;border-radius:var(--r-lg);border:2px solid '+s.color+'33;background:'+s.color+'11;font-family:var(--mono);font-size:12px;font-weight:700;color:'+s.color+';">'+s.part+'</div>';
+    html += '<div style="flex:1;"><div style="font-family:var(--mono);font-size:12px;color:var(--muted);margin-bottom:6px;">'+s.desc+'</div>';
+    html += '<div style="font-family:var(--mono);font-size:11px;color:var(--faint);padding:8px 12px;background:rgba(0,0,0,.25);border-radius:var(--r-sm);border:1px solid var(--border);">'+s.ex+'</div></div>';
+    html += '</div>';
+  });
+  document.getElementById('structure-content').innerHTML = html;
+}
+
+function setMode(m) {
+  mode = m;
+  document.getElementById('tab-compare').classList.toggle('active', m==='compare');
+  document.getElementById('tab-patterns').classList.toggle('active', m==='patterns');
+  document.getElementById('tab-structure').classList.toggle('active', m==='structure');
+  document.getElementById('mode-compare').style.display   = m==='compare'   ? '' : 'none';
+  document.getElementById('mode-patterns').style.display  = m==='patterns'  ? '' : 'none';
+  document.getElementById('mode-structure').style.display = m==='structure' ? '' : 'none';
+  if (m==='patterns') buildPatterns();
+  if (m==='structure') buildStructure();
+}
+
+buildCompare();
+</script>
+<script>(function(){var c=document.getElementById('ai-canvas'),x=c.getContext('2d'),w,h,cols,drops;function r(){w=c.width=window.innerWidth;h=c.height=window.innerHeight;cols=Math.floor(w/16);drops=new Array(cols).fill(0).map(function(){return Math.floor(Math.random()*-60);});}r();window.addEventListener('resize',r);var f=0;function d(){f++;requestAnimationFrame(d);if(f%5!==0)return;x.fillStyle='rgba(6,1,15,0.1)';x.fillRect(0,0,w,h);x.font='12px JetBrains Mono,monospace';for(var i=0;i<cols;i++){x.fillStyle=Math.random()>.96?'rgba(167,139,250,0.18)':'rgba(167,139,250,0.04)';x.fillText('"',i*16,drops[i]*16);if(drops[i]*16>h&&Math.random()>.975)drops[i]=0;else drops[i]++;}}requestAnimationFrame(d);})();</script>
+<script src="../js/main.js"></script>
+</body>
+</html>

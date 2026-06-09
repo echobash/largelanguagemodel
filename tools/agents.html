@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Agents — llm-kit</title>
+  <link rel="stylesheet" href="../css/main.css" />
+  <style>
+    .agent-stage { display:flex; gap:20px; align-items:flex-start; }
+    .agent-loop { flex:0 0 240px; }
+    .loop-step {
+      display:flex; align-items:flex-start; gap:12px; padding:14px 16px;
+      border:1px solid var(--border2); border-radius:var(--r-lg); margin-bottom:10px;
+      background:var(--bg2); font-family:var(--mono); font-size:12px;
+      opacity:0; transform:translateX(-10px); transition:all .4s;
+    }
+    .loop-step.show { opacity:1; transform:none; }
+    .loop-step.active { border-color:rgba(167,139,250,.5); background:rgba(167,139,250,.07); }
+    .loop-icon { font-size:18px; flex-shrink:0; }
+    .loop-label { font-size:9px; text-transform:uppercase; letter-spacing:.1em; color:var(--faint); margin-bottom:2px; }
+    .loop-name  { font-weight:700; }
+    .loop-val   { font-size:11px; color:var(--muted); margin-top:2px; line-height:1.5; }
+
+    .agent-log {
+      flex:1; background:rgba(0,0,0,.3); border:1px solid var(--border);
+      border-radius:var(--r-xl); padding:16px; font-family:var(--mono); font-size:12px;
+      min-height:380px; overflow-y:auto;
+    }
+    .log-entry {
+      margin-bottom:12px; padding-bottom:12px;
+      border-bottom:1px solid rgba(255,255,255,.05);
+      opacity:0; animation:fadeIn .4s var(--ease) forwards;
+    }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:none} }
+    .log-entry:last-child { border-bottom:none; }
+    .log-type { font-size:9px; text-transform:uppercase; letter-spacing:.1em; margin-bottom:4px; }
+    .log-type-think { color:var(--purple); }
+    .log-type-tool  { color:var(--cyan); }
+    .log-type-result{ color:var(--green); }
+    .log-type-answer{ color:var(--amber); }
+    .log-body { color:var(--muted); line-height:1.6; }
+    .log-code {
+      margin-top:6px; padding:8px 12px; background:rgba(0,0,0,.35);
+      border-radius:var(--r-sm); border:1px solid rgba(255,255,255,.06);
+      color:var(--cyan); white-space:pre;
+    }
+    .log-result {
+      margin-top:6px; padding:8px 12px; background:rgba(74,222,128,.06);
+      border-radius:var(--r-sm); border:1px solid rgba(74,222,128,.15);
+      color:var(--green);
+    }
+    .tool-badges { display:flex; gap:8px; flex-wrap:wrap; margin:12px 0; }
+    .tool-badge {
+      padding:6px 14px; border-radius:var(--r-md); font-family:var(--mono); font-size:11px;
+      border:1px solid var(--border2); color:var(--faint); background:var(--bg2);
+      transition:all .3s;
+    }
+    .tool-badge.called { border-color:rgba(56,189,248,.4); color:var(--cyan); background:rgba(56,189,248,.08); }
+  </style>
+</head>
+<body>
+<canvas id="ai-canvas" style="opacity:.2;"></canvas>
+<div class="grid-bg"></div>
+<div class="blob blob-1" style="opacity:.3;"></div>
+
+<nav class="nav scrolled">
+  <a class="nav-brand" href="../index.html"><span class="nav-brand-name">llm-kit</span><span class="nav-brand-by">@echobash</span></a>
+  <ul class="nav-links">
+    <li><a href="../index.html">home</a></li>
+    <li><a href="llm.html">llm</a></li>
+    <li><a href="function-calling.html">function calling</a></li>
+    <li><a href="agents.html" class="active">agents</a></li>
+    <li><a href="mcp.html">mcp</a></li>
+  </ul>
+</nav>
+
+<div class="tool-wrap">
+  <div class="tool-title">ai_agents</div>
+  <div class="tool-sub">// Observe → Think → Act → Observe → … — the agent loop step by step</div>
+
+  <div class="mode-tabs">
+    <button class="mode-tab active" id="tab-react" onclick="setMode('react')">ReAct Agent</button>
+    <button class="mode-tab" id="tab-plan"  onclick="setMode('plan')">Plan-and-Execute</button>
+  </div>
+
+  <div style="font-family:var(--mono);font-size:12px;color:var(--faint);margin-bottom:12px;">
+    TASK: <span style="color:var(--purple);">"What is the current weather in Paris and convert 25°C to Fahrenheit?"</span>
+  </div>
+
+  <div style="font-family:var(--mono);font-size:11px;color:var(--faint);margin-bottom:16px;">
+    AVAILABLE TOOLS:
+  </div>
+  <div class="tool-badges" id="tool-badges">
+    <div class="tool-badge" id="tb-weather">🌤 get_weather(city)</div>
+    <div class="tool-badge" id="tb-convert">🔢 temp_convert(value, unit)</div>
+    <div class="tool-badge" id="tb-search">🔍 web_search(query)</div>
+    <div class="tool-badge" id="tb-calc">🧮 calculator(expr)</div>
+  </div>
+
+  <div class="ctrl-row">
+    <button class="step-btn" id="btn-step" onclick="step()">step →</button>
+    <button class="play-btn" onclick="playAll()">▶ play all</button>
+    <button class="reset-btn" onclick="reset()">↺ reset</button>
+    <span style="font-family:var(--mono);font-size:12px;color:var(--faint);margin-left:4px;" id="step-counter">Step 0 / 0</span>
+  </div>
+
+  <div class="stage">
+    <div class="stage-bar">
+      <div class="stage-bar-left"><span class="wp wp-r"></span><span class="wp wp-y"></span><span class="wp wp-g"></span></div>
+      <span class="stage-progress" id="stage-progress">Ready — click "step" to begin</span>
+    </div>
+    <div class="stage-body">
+      <div class="agent-stage">
+        <div class="agent-loop" id="agent-loop"></div>
+        <div class="agent-log" id="agent-log">
+          <div style="color:var(--faint);font-size:12px;">Agent execution log will appear here…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="explain-panel">
+    <div class="explain-step" id="exp-step">What is an AI Agent?</div>
+    <div class="explain-text" id="exp-text">An AI agent is an LLM that can take actions in a loop. Unlike a single-turn chatbot, an agent can call tools (APIs, search, code), observe the results, and decide what to do next — repeating until the task is done. ReAct (Reason + Act) is the most common pattern.</div>
+    <div class="explain-tags" id="exp-tags"></div>
+  </div>
+</div><!-- ── Also by echobash strip ── -->
+<div class="also-strip">
+  <div class="also-inner">
+    <span class="also-label">also by echobash</span>
+    <div class="also-divider"></div>
+    <div class="also-links">
+      <a href="https://devdunia.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--cyan);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">devdunia</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">networking tools</span>
+      </a>
+      <a href="https://echobash.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--purple);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">echobash</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">portfolio</span>
+      </a>
+      <a href="https://promptflix.in" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--amber);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">promptflix</span><span class="also-link-tld">.in</span>
+        <span class="also-link-sub">prompt library</span>
+      </a>
+    </div>
+  </div>
+</div>
+<footer class="footer">
+  <p>built by echobash &nbsp;·&nbsp; <a href="https://devdunia.com" target="_blank" rel="noopener">devdunia.com</a> &nbsp;·&nbsp; <a href="https://echobash.com" target="_blank" rel="noopener">echobash.com</a> &nbsp;·&nbsp; <a href="https://promptflix.in" target="_blank" rel="noopener">promptflix.in</a></p>
+  <p style="margin-top:4px;">llm-kit is open source — AI tools for everyone</p>
+</footer>
+
+<script>
+var mode = 'react', currentStep = 0;
+
+var REACT_STEPS = [
+  {
+    loop: { icon:'👁️', label:'OBSERVE', name:'Receive Task', val:'User query received by agent runtime', color:'var(--purple)' },
+    log: { type:'think', typeLabel:'THINK', body:'I need to find current weather in Paris and convert 25°C to Fahrenheit. I\'ll start by calling get_weather for Paris.' },
+    tool: null,
+    step:'Step 1 — Observe & Think',
+    text:'The agent receives the task and reasons about it. In ReAct, the agent explicitly writes its "thought" before acting. This chain-of-thought helps the LLM plan which tool to use first.',
+    tags:['OBSERVE','REACT','CHAIN-OF-THOUGHT']
+  },
+  {
+    loop: { icon:'⚡', label:'ACT', name:'Call Tool', val:'get_weather("Paris")', color:'var(--cyan)' },
+    log: { type:'tool', typeLabel:'ACTION', body:'Calling tool: get_weather', code:'get_weather({\n  city: "Paris"\n})' },
+    tool: 'weather',
+    step:'Step 2 — Act: Call get_weather',
+    text:'The agent decides to call get_weather(). In function calling, the LLM outputs a structured JSON specifying the function name and parameters. The agent runtime intercepts this and executes the actual API call.',
+    tags:['FUNCTION CALLING','TOOL USE','JSON']
+  },
+  {
+    loop: { icon:'📡', label:'OBSERVE', name:'Tool Result', val:'Paris: 18°C, partly cloudy', color:'var(--green)' },
+    log: { type:'result', typeLabel:'OBSERVATION', body:'', result:'{"city":"Paris","temp":18,"unit":"C","condition":"partly cloudy","humidity":72}' },
+    tool: null,
+    step:'Step 3 — Observe Tool Result',
+    text:'The weather API returns data. The agent receives this as a new "observation" and adds it to its context. Now it knows the current weather but still needs to convert 25°C to Fahrenheit.',
+    tags:['TOOL RESULT','OBSERVATION','CONTEXT UPDATE']
+  },
+  {
+    loop: { icon:'🧠', label:'THINK', name:'Reason Next', val:'Now convert 25°C to Fahrenheit', color:'var(--purple)' },
+    log: { type:'think', typeLabel:'THINK', body:'I have the weather for Paris (18°C). Now I need to convert 25°C to Fahrenheit. I\'ll call temp_convert tool.' },
+    tool: null,
+    step:'Step 4 — Think Again',
+    text:'After observing the result, the agent reasons again. ReAct interleaves Reasoning (Thought) and Acting (Action). This loop continues until the agent has all the information needed to answer.',
+    tags:['REASONING','REACT LOOP','MULTI-STEP']
+  },
+  {
+    loop: { icon:'⚡', label:'ACT', name:'Call Tool', val:'temp_convert(25, "C")', color:'var(--cyan)' },
+    log: { type:'tool', typeLabel:'ACTION', body:'Calling tool: temp_convert', code:'temp_convert({\n  value: 25,\n  from_unit: "C",\n  to_unit: "F"\n})' },
+    tool: 'convert',
+    step:'Step 5 — Act: Call temp_convert',
+    text:'The agent calls the second tool. Notice it correctly identifies that 25°C (from the user query) needs conversion — not 18°C (the current weather). The agent tracked which sub-task still needs completing.',
+    tags:['TOOL USE','MULTI-TOOL','TASK TRACKING']
+  },
+  {
+    loop: { icon:'📡', label:'OBSERVE', name:'Tool Result', val:'25°C = 77°F', color:'var(--green)' },
+    log: { type:'result', typeLabel:'OBSERVATION', body:'', result:'{"input":25,"from":"C","to":"F","result":77}' },
+    tool: null,
+    step:'Step 6 — Observe Second Result',
+    text:'The conversion tool returns 77°F. Now the agent has both pieces of information needed to answer the original question. It can synthesize a final response.',
+    tags:['OBSERVATION','DATA SYNTHESIS']
+  },
+  {
+    loop: { icon:'✅', label:'RESPOND', name:'Final Answer', val:'Task complete — all info gathered', color:'var(--amber)' },
+    log: { type:'answer', typeLabel:'FINAL ANSWER', body:'The current weather in Paris is 18°C (partly cloudy, humidity 72%). As for the conversion: 25°C = 77°F.\n\nIs there anything else you\'d like to know?' },
+    tool: null,
+    step:'Step 7 — Final Response',
+    text:'The agent synthesizes all observations into a coherent final answer. It correctly addresses both parts of the original query. The agent loop terminates when there are no more tool calls to make.',
+    tags:['SYNTHESIS','FINAL ANSWER','AGENT COMPLETE']
+  }
+];
+
+var PLAN_STEPS = [
+  {
+    loop: { icon:'📋', label:'PLAN', name:'Create Plan', val:'Decompose task into sub-tasks', color:'var(--purple)' },
+    log: { type:'think', typeLabel:'PLANNER', body:'Task decomposition:\n1. Get current weather in Paris\n2. Convert 25°C to Fahrenheit\n3. Combine results into final answer' },
+    tool: null,
+    step:'Step 1 — Planning Phase',
+    text:'In Plan-and-Execute, a "planner" LLM first creates a full execution plan before any tools are called. This is better than ReAct for complex tasks with many steps because the plan can be verified before execution.',
+    tags:['PLANNER','TASK DECOMPOSITION','PLAN-AND-EXECUTE']
+  },
+  {
+    loop: { icon:'⚡', label:'EXECUTE', name:'Execute Step 1', val:'get_weather("Paris")', color:'var(--cyan)' },
+    log: { type:'tool', typeLabel:'EXECUTOR STEP 1', body:'Executing plan step 1: get weather', code:'get_weather({ city: "Paris" })' },
+    tool: 'weather',
+    step:'Step 2 — Execute Step 1',
+    text:'An "executor" LLM (often smaller/cheaper) carries out each planned step. The executor focuses only on the current step without needing to reason about the full task.',
+    tags:['EXECUTOR','TOOL CALL','STEP EXECUTION']
+  },
+  {
+    loop: { icon:'📡', label:'RESULT', name:'Step 1 Result', val:'18°C, partly cloudy', color:'var(--green)' },
+    log: { type:'result', typeLabel:'STEP 1 RESULT', body:'', result:'{"city":"Paris","temp":18,"condition":"partly cloudy"}' },
+    tool: null,
+    step:'Step 3 — Store Step 1 Result',
+    text:'The result of step 1 is stored in the agent\'s memory/scratchpad. The executor moves on to step 2 of the plan.',
+    tags:['MEMORY','SCRATCHPAD','RESULT STORAGE']
+  },
+  {
+    loop: { icon:'⚡', label:'EXECUTE', name:'Execute Step 2', val:'temp_convert(25, "C")', color:'var(--cyan)' },
+    log: { type:'tool', typeLabel:'EXECUTOR STEP 2', body:'Executing plan step 2: convert temperature', code:'temp_convert({ value: 25, from_unit: "C", to_unit: "F" })' },
+    tool: 'convert',
+    step:'Step 4 — Execute Step 2',
+    text:'The executor runs step 2 independently. Each step is self-contained — the executor doesn\'t need the result of step 1 to run step 2, so these could even run in parallel.',
+    tags:['PARALLEL EXECUTION','INDEPENDENT STEPS']
+  },
+  {
+    loop: { icon:'✅', label:'SYNTHESIZE', name:'Final Answer', val:'Combine all results', color:'var(--amber)' },
+    log: { type:'answer', typeLabel:'FINAL ANSWER', body:'Current Paris weather: 18°C, partly cloudy.\n25°C = 77°F\n\nAll plan steps complete.' },
+    tool: null,
+    step:'Step 5 — Synthesize',
+    text:'With all steps complete, a final synthesis step combines results. Plan-and-Execute is more efficient than ReAct for predictable multi-step tasks but less flexible when steps need to adapt based on previous results.',
+    tags:['SYNTHESIS','PLAN COMPLETE','COMPARISON']
+  }
+];
+
+var steps, maxSteps;
+
+function setMode(m) {
+  mode = m;
+  document.getElementById('tab-react').classList.toggle('active', m === 'react');
+  document.getElementById('tab-plan').classList.toggle('active', m === 'plan');
+  reset();
+}
+
+function reset() {
+  currentStep = 0;
+  steps = mode === 'react' ? REACT_STEPS : PLAN_STEPS;
+  maxSteps = steps.length;
+  document.getElementById('step-counter').textContent = 'Step 0 / ' + maxSteps;
+  document.getElementById('btn-step').disabled = false;
+  document.getElementById('stage-progress').textContent = 'Ready — click "step" to begin';
+  document.getElementById('agent-loop').innerHTML = '';
+  document.getElementById('agent-log').innerHTML = '<div style="color:var(--faint);font-size:12px;">Agent execution log will appear here…</div>';
+  document.querySelectorAll('.tool-badge').forEach(function(el) { el.classList.remove('called'); });
+
+  document.getElementById('exp-step').textContent = mode === 'react' ? 'ReAct Agent Pattern' : 'Plan-and-Execute Agent';
+  document.getElementById('exp-text').textContent = mode === 'react'
+    ? 'ReAct (Yao et al. 2022) interleaves Reasoning (Thought) and Acting (Action) in a loop. The agent writes its reasoning before each action. This makes the decision process interpretable and helps the LLM stay on track.'
+    : 'Plan-and-Execute separates planning from execution. A more capable "planner" LLM creates the full plan, then a smaller "executor" LLM runs each step. Better for predictable tasks; more cost-efficient.';
+  document.getElementById('exp-tags').innerHTML = mode === 'react'
+    ? '<span class="tag tag-p">REACT</span><span class="tag tag-c">TOOL USE</span><span class="tag tag-g">MULTI-STEP</span>'
+    : '<span class="tag tag-p">PLANNER LLM</span><span class="tag tag-c">EXECUTOR LLM</span><span class="tag tag-a">PARALLEL STEPS</span>';
+}
+
+function step() {
+  if (currentStep >= maxSteps) return;
+  var s = steps[currentStep];
+
+  // Add to loop display
+  var loopHtml = document.getElementById('agent-loop').innerHTML;
+  if (loopHtml.includes('style="color:var(--faint)')) {
+    document.getElementById('agent-loop').innerHTML = '';
+  }
+  var stepEl = document.createElement('div');
+  stepEl.className = 'loop-step show active';
+  stepEl.innerHTML =
+    '<div class="loop-icon">'+s.loop.icon+'</div>' +
+    '<div><div class="loop-label">'+s.loop.label+'</div>' +
+    '<div class="loop-name" style="color:'+s.loop.color+';">'+s.loop.name+'</div>' +
+    '<div class="loop-val">'+s.loop.val+'</div></div>';
+  // Remove active from previous
+  document.querySelectorAll('.loop-step.active').forEach(function(el) { el.classList.remove('active'); });
+  document.getElementById('agent-loop').appendChild(stepEl);
+
+  // Add to log
+  var log = document.getElementById('agent-log');
+  if (log.querySelector('[style*="color:var(--faint)"]')) { log.innerHTML = ''; }
+  var entry = document.createElement('div');
+  entry.className = 'log-entry';
+  var typeClass = 'log-type-' + s.log.type;
+  var html = '<div class="log-type '+typeClass+'">'+s.log.typeLabel+'</div>';
+  if (s.log.body) html += '<div class="log-body">'+s.log.body.replace(/\n/g,'<br>')+'</div>';
+  if (s.log.code) html += '<div class="log-code">'+s.log.code+'</div>';
+  if (s.log.result) html += '<div class="log-result">'+s.log.result+'</div>';
+  entry.innerHTML = html;
+  log.appendChild(entry);
+  log.scrollTop = log.scrollHeight;
+
+  // Mark tool as called
+  if (s.tool === 'weather') document.getElementById('tb-weather').classList.add('called');
+  if (s.tool === 'convert') document.getElementById('tb-convert').classList.add('called');
+
+  document.getElementById('exp-step').textContent = s.step;
+  document.getElementById('exp-text').textContent = s.text;
+  document.getElementById('exp-tags').innerHTML = s.tags.map(function(t) {
+    return '<span class="tag tag-p">'+t+'</span>';
+  }).join('');
+  document.getElementById('stage-progress').textContent = s.step;
+
+  currentStep++;
+  document.getElementById('step-counter').textContent = 'Step ' + currentStep + ' / ' + maxSteps;
+  if (currentStep >= maxSteps) {
+    document.getElementById('btn-step').disabled = true;
+    document.getElementById('stage-progress').textContent = 'Agent task complete ✓';
+  }
+}
+
+function playAll() {
+  reset();
+  var i = 0;
+  function next() { if (i < maxSteps) { step(); i++; setTimeout(next, 800); } }
+  setTimeout(next, 300);
+}
+
+reset();
+</script>
+<script>(function(){var c=document.getElementById('ai-canvas'),x=c.getContext('2d'),w,h,cols,drops,CH='⚡🔧📋✅';function r(){w=c.width=window.innerWidth;h=c.height=window.innerHeight;cols=Math.floor(w/16);drops=new Array(cols).fill(0).map(function(){return Math.floor(Math.random()*-60);});}r();window.addEventListener('resize',r);var f=0;function d(){f++;requestAnimationFrame(d);if(f%5!==0)return;x.fillStyle='rgba(6,1,15,0.1)';x.fillRect(0,0,w,h);x.font='12px JetBrains Mono,monospace';for(var i=0;i<cols;i++){x.fillStyle=Math.random()>.95?'rgba(56,189,248,0.2)':'rgba(56,189,248,0.04)';x.fillText(Math.random()>.5?'1':'0',i*16,drops[i]*16);if(drops[i]*16>h&&Math.random()>.975)drops[i]=0;else drops[i]++;}}requestAnimationFrame(d);})();</script>
+<script src="../js/main.js"></script>
+</body>
+</html>

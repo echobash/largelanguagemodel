@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Benchmarks — llm-kit</title>
+  <link rel="stylesheet" href="../css/main.css" />
+  <style>
+    .bench-table { width:100%; border-collapse:collapse; font-family:var(--mono); font-size:11px; }
+    .bench-table th { text-align:left; padding:8px 10px; color:var(--faint); border-bottom:1px solid var(--border); font-weight:600; text-transform:uppercase; letter-spacing:.08em; }
+    .bench-table td { padding:8px 10px; border-bottom:1px solid rgba(255,255,255,.04); vertical-align:middle; }
+    .bench-table tr:hover td { background:rgba(255,255,255,.02); }
+    .score-bar { height:8px; border-radius:99px; display:inline-block; vertical-align:middle; min-width:2px; }
+    .model-name { font-weight:700; font-size:12px; }
+    .bench-tag { display:inline-block; font-size:9px; padding:1px 6px; border-radius:99px; border:1px solid; margin-right:3px; }
+
+    .bcard { background:var(--bg2); border:1px solid var(--border2); border-radius:var(--r-xl); padding:14px 16px; margin-bottom:10px; font-family:var(--mono); }
+    .bcard-name  { font-size:14px; font-weight:700; margin-bottom:4px; }
+    .bcard-full  { font-size:11px; color:var(--faint); margin-bottom:6px; }
+    .bcard-what  { font-size:12px; color:var(--muted); line-height:1.5; }
+    .bcard-ex    { font-size:11px; color:var(--cyan); margin-top:6px; padding:6px 10px; background:rgba(56,189,248,.06); border-radius:var(--r-sm); border-left:2px solid var(--cyan); }
+
+    .score-cell { white-space:nowrap; }
+  </style>
+</head>
+<body>
+<canvas id="ai-canvas" style="opacity:.15;"></canvas>
+<div class="grid-bg"></div>
+<div class="blob blob-1" style="opacity:.25;"></div>
+<nav class="nav scrolled">
+  <a class="nav-brand" href="../index.html"><span class="nav-brand-name">llm-kit</span><span class="nav-brand-by">@echobash</span></a>
+  <ul class="nav-links">
+    <li><a href="../index.html">home</a></li>
+    <li><a href="glossary.html">glossary</a></li>
+    <li><a href="benchmark.html" class="active">benchmarks</a></li>
+  </ul>
+</nav>
+<div class="tool-wrap">
+  <div class="tool-title">ai_benchmarks</div>
+  <div class="tool-sub">// How we measure if an AI is actually getting smarter (and why benchmarks lie)</div>
+
+  <div style="background:rgba(251,191,36,.06);border:1px solid rgba(251,191,36,.2);border-radius:var(--r-lg);padding:14px 18px;margin-bottom:24px;font-family:var(--mono);font-size:13px;color:var(--muted);line-height:1.7;">
+    💡 <strong style="color:var(--amber);">The core idea:</strong> How do you compare two AI models? Give them a standardized test. Like SATs for humans — a fixed set of questions that everyone answers the same way. A model that scores 90% on MMLU answered 90% of a wide range of knowledge questions correctly. But just like SAT scores don't capture everything, no single benchmark tells the whole story.
+  </div>
+
+  <div class="mode-tabs">
+    <button class="mode-tab active" id="tab-what"   onclick="setMode('what')">What Benchmarks Exist</button>
+    <button class="mode-tab" id="tab-scores" onclick="setMode('scores')">Model Scores</button>
+    <button class="mode-tab" id="tab-limits" onclick="setMode('limits')">Why Benchmarks Lie</button>
+  </div>
+
+  <div class="stage">
+    <div class="stage-bar">
+      <div class="stage-bar-left"><span class="wp wp-r"></span><span class="wp wp-y"></span><span class="wp wp-g"></span></div>
+      <span class="stage-progress" id="stage-progress">The most important AI benchmarks explained</span>
+    </div>
+    <div class="stage-body" id="stage-body">
+
+      <div id="mode-what">
+        <div id="what-content"></div>
+      </div>
+
+      <div id="mode-scores" style="display:none;">
+        <div style="font-family:var(--mono);font-size:11px;color:var(--faint);margin-bottom:10px;">Approximate scores as of early 2025. Scores shift as models update.</div>
+        <div style="overflow-x:auto;">
+          <table class="bench-table" id="scores-table"></table>
+        </div>
+      </div>
+
+      <div id="mode-limits" style="display:none;">
+        <div id="limits-content"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="explain-panel">
+    <div class="explain-step" id="exp-step">MMLU is the most common benchmark</div>
+    <div class="explain-text" id="exp-text">MMLU (Massive Multitask Language Understanding) tests 57 subjects including mathematics, history, law, medicine, physics, ethics, and more — 14,000+ multiple-choice questions. A random guesser scores 25%. Humans average ~89%. GPT-4 scores ~87%. Modern frontier models now exceed 90%, approaching the ceiling of this benchmark.</div>
+    <div class="explain-tags" id="exp-tags"><span class="tag tag-a">57 SUBJECTS, 14K QUESTIONS</span><span class="tag tag-p">HUMAN BASELINE: ~89%</span></div>
+  </div>
+</div><!-- ── Also by echobash strip ── -->
+<div class="also-strip">
+  <div class="also-inner">
+    <span class="also-label">also by echobash</span>
+    <div class="also-divider"></div>
+    <div class="also-links">
+      <a href="https://devdunia.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--cyan);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">devdunia</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">networking tools</span>
+      </a>
+      <a href="https://echobash.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--purple);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">echobash</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">portfolio</span>
+      </a>
+      <a href="https://promptflix.in" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--amber);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">promptflix</span><span class="also-link-tld">.in</span>
+        <span class="also-link-sub">prompt library</span>
+      </a>
+    </div>
+  </div>
+</div>
+<footer class="footer">
+  <p>built by echobash &nbsp;·&nbsp; <a href="https://devdunia.com" target="_blank" rel="noopener">devdunia.com</a> &nbsp;·&nbsp; <a href="https://echobash.com" target="_blank" rel="noopener">echobash.com</a> &nbsp;·&nbsp; <a href="https://promptflix.in" target="_blank" rel="noopener">promptflix.in</a></p>
+  <p style="margin-top:4px;">llm-kit is open source — AI tools for everyone</p>
+</footer>
+<script>
+var BENCHMARKS = [
+  { name:'MMLU', full:'Massive Multitask Language Understanding', color:'var(--purple)', what:'57 subjects including math, science, law, history, medicine. Multiple-choice. Tests broad knowledge.', ex:'Example Q: "Which of the following is NOT a symptom of Parkinson\'s disease? A) Tremor B) Bradykinesia C) Hallucinations D) Hypertension" (Answer: D)' },
+  { name:'HumanEval', full:'Human Evaluation of Code Generation', color:'var(--green)', what:'164 Python programming problems. Tests if the AI can write correct code. Created by OpenAI. Pass@1 metric.', ex:'Example: Write a function that returns the nth Fibonacci number. AI must write working Python code that passes all test cases.' },
+  { name:'MATH', full:'MATH Benchmark', color:'var(--amber)', what:'12,500 competition math problems. High school competition level (AMC/AIME style). Very hard — early GPT-4 scored only ~52%.', ex:'Example: "Find all real numbers x such that |2x-5| + |x+1| = 8". Requires multi-step algebraic reasoning.' },
+  { name:'HellaSwag', full:'HellaSwag (Harder Endings, Longer contexts)', color:'var(--cyan)', what:'Common-sense reasoning. Given a sentence, pick the most logical continuation. Easy for humans (95%+). Tests everyday reasoning.', ex:'"She poured water into the pot. She added salt and brought it to a boil. She..." A) ...painted the wall. B) ...added the pasta.' },
+  { name:'GSM8K', full:'Grade School Math 8K', color:'var(--pink)', what:'8,500 grade school math word problems requiring multi-step reasoning. Tests if AI can solve problems like a student.', ex:'"Tom has 5 apples. He gives 2 to his sister and buys 3 more. How many does he have?" Requires tracking state across steps.' },
+  { name:'SWE-bench', full:'Software Engineering Benchmark', color:'var(--green)', what:'Real GitHub issues from popular Python repos. AI must write code that fixes the actual bug. Very hard and practical.', ex:'Given a real bug report from Django/numpy/etc, write a code patch that fixes it. Currently only top agents score >40%.' },
+  { name:'GPQA', full:'Graduate-Level Google-Proof QA', color:'var(--amber)', what:'PhD-level science questions in biology, physics, chemistry. Designed so even Google search can\'t easily help. Tests deep expert knowledge.', ex:'Questions written and verified by domain PhDs. Random human scores 25%. PhD experts who wrote them score 65%. Models: 40-70%.' },
+  { name:'LMSYS Chatbot Arena', full:'Human Preference Arena', color:'var(--purple)', what:'Humans blindly compare two AI responses and pick which one they prefer. Ranking based on real user preference, not academic tests.', ex:'Not automated — humans chat with two mystery models and vote for the better response. Elo-based ranking (like chess). Most realistic measure.' },
+];
+
+function buildWhat() {
+  var html = '';
+  BENCHMARKS.forEach(function(b) {
+    html += '<div class="bcard"><div class="bcard-name" style="color:'+b.color+';">'+b.name+'</div><div class="bcard-full">'+b.full+'</div><div class="bcard-what">'+b.what+'</div><div class="bcard-ex">Example: '+b.ex+'</div></div>';
+  });
+  document.getElementById('what-content').innerHTML = html;
+}
+buildWhat();
+
+var SCORES_DATA = [
+  { model:'Claude 3.7 Sonnet', maker:'Anthropic', color:'#a78bfa', mmlu:90.1, human:93.0, gsm8k:95.2, he:87.3 },
+  { model:'GPT-4o',            maker:'OpenAI',    color:'#4ade80', mmlu:88.7, human:90.2, gsm8k:93.1, he:90.2 },
+  { model:'Gemini 1.5 Pro',    maker:'Google',    color:'#fbbf24', mmlu:90.0, human:91.5, gsm8k:91.7, he:84.1 },
+  { model:'Llama 3.1 405B',    maker:'Meta',      color:'#38bdf8', mmlu:88.6, human:88.1, gsm8k:95.1, he:89.0 },
+  { model:'DeepSeek-V3',       maker:'DeepSeek',  color:'#f472b6', mmlu:88.5, human:90.2, gsm8k:89.9, he:82.6 },
+  { model:'Mistral Large 2',   maker:'Mistral',   color:'#fb923c', mmlu:84.0, human:86.0, gsm8k:93.0, he:92.0 },
+  { model:'GPT-4 (original)',  maker:'OpenAI',    color:'#86efac', mmlu:86.4, human:86.6, gsm8k:92.0, he:67.0 },
+  { model:'GPT-3.5 Turbo',     maker:'OpenAI',    color:'#6ee7b7', mmlu:70.0, human:72.1, gsm8k:57.1, he:48.1 },
+];
+
+function buildScores() {
+  var html = '<tr><th>Model</th><th>MMLU</th><th>HumanEval</th><th>GSM8K</th><th>GPQA</th></tr>';
+  SCORES_DATA.forEach(function(m) {
+    html += '<tr>';
+    html += '<td><div class="model-name" style="color:'+m.color+';">'+m.model+'</div><div style="font-size:10px;color:var(--faint);">'+m.maker+'</div></td>';
+    ['mmlu','human','gsm8k','he'].forEach(function(k) {
+      var v = m[k];
+      html += '<td class="score-cell"><span class="score-bar" style="width:'+(v*0.6)+'px;background:'+m.color+'66;"></span> <span style="color:'+m.color+';">'+v+'%</span></td>';
+    });
+    html += '</tr>';
+  });
+  document.getElementById('scores-table').innerHTML = html;
+}
+
+var LIMITS_DATA = [
+  { color:'var(--red)', title:'Benchmark contamination', desc:'If training data includes the test questions, the model memorizes answers rather than truly solving them. This is why new, never-published benchmarks like GPQA are valuable — they can\'t be contaminated yet.' },
+  { color:'var(--amber)', title:'Benchmarks get saturated', desc:'When MMLU launched, GPT-3 scored 43%. Now top models score 90%+, near the ceiling. A saturated benchmark can\'t differentiate between top models anymore. This is why new, harder benchmarks keep being created.' },
+  { color:'var(--purple)', title:'Doesn\'t measure what humans care about', desc:'Academic benchmarks don\'t capture: "Is this enjoyable to talk to?", "Does it follow my instructions reliably?", "Is it safe to deploy?". Chatbot Arena (human preference votes) is more realistic but still imperfect.' },
+  { color:'var(--cyan)', title:'Gaming / selective reporting', desc:'Companies choose which benchmarks to publish. If a model does poorly on one benchmark, they may not mention it. Always look at a comprehensive set, not just cherry-picked results in press releases.' },
+  { color:'var(--green)', title:'Task-specific performance varies', desc:'A model that scores 90% on MMLU might be terrible at creative writing and great at coding. Aggregate scores mask huge variance in specific task performance. Always test on YOUR specific use case.' },
+];
+
+function buildLimits() {
+  var html = '';
+  LIMITS_DATA.forEach(function(l) {
+    html += '<div style="display:flex;gap:12px;margin-bottom:12px;"><div style="flex:0 0 10px;margin-top:6px;width:10px;height:10px;border-radius:50%;background:'+l.color+';flex-shrink:0;"></div><div><div style="font-family:var(--mono);font-size:13px;font-weight:700;color:'+l.color+';margin-bottom:4px;">'+l.title+'</div><div style="font-family:var(--mono);font-size:12px;color:var(--muted);line-height:1.6;">'+l.desc+'</div></div></div>';
+  });
+  document.getElementById('limits-content').innerHTML = html;
+}
+
+function setMode(m) {
+  ['what','scores','limits'].forEach(function(x) {
+    document.getElementById('mode-'+x).style.display = x===m?'':'none';
+    document.getElementById('tab-'+x).classList.toggle('active', x===m);
+  });
+  if (m==='scores') buildScores();
+  if (m==='limits') buildLimits();
+  document.getElementById('stage-progress').textContent = m==='what'?'Key AI benchmarks explained':m==='scores'?'Model scores comparison':'Why benchmarks can be misleading';
+}
+</script>
+<script>(function(){var c=document.getElementById('ai-canvas'),x=c.getContext('2d'),w,h,cols,drops;function r(){w=c.width=window.innerWidth;h=c.height=window.innerHeight;cols=Math.floor(w/16);drops=new Array(cols).fill(0).map(function(){return Math.floor(Math.random()*-60);});}r();window.addEventListener('resize',r);var f=0;function d(){f++;requestAnimationFrame(d);if(f%5!==0)return;x.fillStyle='rgba(6,1,15,0.1)';x.fillRect(0,0,w,h);x.font='12px JetBrains Mono,monospace';for(var i=0;i<cols;i++){x.fillStyle=Math.random()>.96?'rgba(251,191,36,0.18)':'rgba(251,191,36,0.04)';x.fillText(Math.random()>.5?'%':'✓',i*16,drops[i]*16);if(drops[i]*16>h&&Math.random()>.975)drops[i]=0;else drops[i]++;}}requestAnimationFrame(d);})();</script>
+<script src="../js/main.js"></script>
+</body>
+</html>

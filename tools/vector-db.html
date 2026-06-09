@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vector Database — llm-kit</title>
+  <link rel="stylesheet" href="../css/main.css" />
+  <style>
+    canvas#vec-canvas { display:block; border-radius:var(--r-lg); background:rgba(0,0,0,.3); border:1px solid var(--border); cursor:pointer; max-width:100%; }
+    .sim-bar { margin:6px 0; display:flex; align-items:center; gap:10px; font-family:var(--mono); font-size:12px; }
+    .sim-label { min-width:140px; color:var(--muted); }
+    .sim-track { flex:1; height:10px; background:var(--bg3); border-radius:99px; overflow:hidden; }
+    .sim-fill  { height:100%; border-radius:99px; transition:width .5s var(--ease); }
+    .sim-score { min-width:40px; text-align:right; }
+
+    .db-card { background:var(--bg2); border:1px solid var(--border2); border-radius:var(--r-lg); padding:14px 16px; margin-bottom:10px; font-family:var(--mono); }
+    .db-name  { font-size:13px; font-weight:700; margin-bottom:4px; }
+    .db-meta  { font-size:11px; color:var(--faint); margin-bottom:6px; }
+    .db-desc  { font-size:11px; color:var(--muted); line-height:1.5; }
+  </style>
+</head>
+<body>
+<canvas id="ai-canvas" style="opacity:.15;"></canvas>
+<div class="grid-bg"></div>
+<div class="blob blob-2" style="opacity:.25;"></div>
+<nav class="nav scrolled">
+  <a class="nav-brand" href="../index.html"><span class="nav-brand-name">llm-kit</span><span class="nav-brand-by">@echobash</span></a>
+  <ul class="nav-links">
+    <li><a href="../index.html">home</a></li>
+    <li><a href="embeddings.html">embeddings</a></li>
+    <li><a href="rag.html">rag</a></li>
+    <li><a href="vector-db.html" class="active">vector db</a></li>
+  </ul>
+</nav>
+<div class="tool-wrap">
+  <div class="tool-title">vector_database</div>
+  <div class="tool-sub">// A special kind of database that searches by meaning, not exact words</div>
+
+  <div style="background:rgba(56,189,248,.06);border:1px solid rgba(56,189,248,.2);border-radius:var(--r-lg);padding:14px 18px;margin-bottom:24px;font-family:var(--mono);font-size:13px;color:var(--muted);line-height:1.7;">
+    💡 <strong style="color:var(--cyan);">The core idea:</strong> A regular database finds rows that exactly match your search. A vector database finds items that are <em>similar in meaning</em>. You ask "find documents about fixing cars" and it returns results about "automobile repair" and "mechanic tips" — even if those words never appeared in your query. It does this by converting text to numbers (vectors) and measuring distance between them.
+  </div>
+
+  <div class="mode-tabs">
+    <button class="mode-tab active" id="tab-vis"   onclick="setMode('vis')">Visual Demo</button>
+    <button class="mode-tab" id="tab-how"   onclick="setMode('how')">How Search Works</button>
+    <button class="mode-tab" id="tab-dbs"   onclick="setMode('dbs')">Popular Vector DBs</button>
+  </div>
+
+  <div class="stage">
+    <div class="stage-bar">
+      <div class="stage-bar-left"><span class="wp wp-r"></span><span class="wp wp-y"></span><span class="wp wp-g"></span></div>
+      <span class="stage-progress" id="stage-progress">Click any word to find similar words</span>
+    </div>
+    <div class="stage-body" id="stage-body">
+
+      <div id="mode-vis">
+        <div style="font-family:var(--mono);font-size:12px;color:var(--faint);margin-bottom:8px;">Click any word below to search for the most similar words (nearest neighbors)</div>
+        <canvas id="vec-canvas" width="680" height="320" style="width:100%;height:auto;"></canvas>
+        <div id="sim-results" style="margin-top:12px;"></div>
+      </div>
+
+      <div id="mode-how" style="display:none;">
+        <div id="how-steps"></div>
+      </div>
+
+      <div id="mode-dbs" style="display:none;">
+        <div id="dbs-list"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="explain-panel">
+    <div class="explain-step" id="exp-step">Regular DB vs Vector DB</div>
+    <div class="explain-text" id="exp-text">A regular database: SELECT * FROM docs WHERE text LIKE '%car%'. A vector database: "give me the 5 documents with the closest meaning to my query." The difference is that vectors capture meaning — "vehicle" and "automobile" are close vectors even though they're different words.</div>
+    <div class="explain-tags" id="exp-tags"><span class="tag tag-c">SEARCHES BY MEANING</span><span class="tag tag-p">USED IN EVERY RAG SYSTEM</span></div>
+  </div>
+</div><!-- ── Also by echobash strip ── -->
+<div class="also-strip">
+  <div class="also-inner">
+    <span class="also-label">also by echobash</span>
+    <div class="also-divider"></div>
+    <div class="also-links">
+      <a href="https://devdunia.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--cyan);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">devdunia</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">networking tools</span>
+      </a>
+      <a href="https://echobash.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--purple);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">echobash</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">portfolio</span>
+      </a>
+      <a href="https://promptflix.in" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--amber);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">promptflix</span><span class="also-link-tld">.in</span>
+        <span class="also-link-sub">prompt library</span>
+      </a>
+    </div>
+  </div>
+</div>
+<footer class="footer">
+  <p>built by echobash &nbsp;·&nbsp; <a href="https://devdunia.com" target="_blank" rel="noopener">devdunia.com</a> &nbsp;·&nbsp; <a href="https://echobash.com" target="_blank" rel="noopener">echobash.com</a> &nbsp;·&nbsp; <a href="https://promptflix.in" target="_blank" rel="noopener">promptflix.in</a></p>
+  <p style="margin-top:4px;">llm-kit is open source — AI tools for everyone</p>
+</footer>
+<script>
+var WORDS = [
+  { word:'king',     x:.15, y:.2,  color:'#a78bfa', group:'royalty' },
+  { word:'queen',    x:.22, y:.28, color:'#a78bfa', group:'royalty' },
+  { word:'prince',   x:.10, y:.32, color:'#a78bfa', group:'royalty' },
+  { word:'castle',   x:.18, y:.38, color:'#c4b5fd', group:'royalty' },
+  { word:'dog',      x:.55, y:.2,  color:'#38bdf8', group:'animals' },
+  { word:'cat',      x:.62, y:.15, color:'#38bdf8', group:'animals' },
+  { word:'puppy',    x:.5,  y:.28, color:'#38bdf8', group:'animals' },
+  { word:'kitten',   x:.68, y:.22, color:'#38bdf8', group:'animals' },
+  { word:'bark',     x:.57, y:.32, color:'#7dd3fc', group:'animals' },
+  { word:'Paris',    x:.3,  y:.65, color:'#4ade80', group:'places' },
+  { word:'London',   x:.38, y:.72, color:'#4ade80', group:'places' },
+  { word:'France',   x:.24, y:.72, color:'#4ade80', group:'places' },
+  { word:'capital',  x:.32, y:.78, color:'#86efac', group:'places' },
+  { word:'pizza',    x:.7,  y:.7,  color:'#fbbf24', group:'food' },
+  { word:'burger',   x:.78, y:.65, color:'#fbbf24', group:'food' },
+  { word:'sushi',    x:.74, y:.75, color:'#fbbf24', group:'food' },
+  { word:'cook',     x:.65, y:.78, color:'#fde68a', group:'food' },
+  { word:'happy',    x:.12, y:.58, color:'#f472b6', group:'emotions' },
+  { word:'sad',      x:.19, y:.65, color:'#f472b6', group:'emotions' },
+  { word:'joyful',   x:.08, y:.65, color:'#f9a8d4', group:'emotions' },
+];
+
+var selected = null;
+var canvas = document.getElementById('vec-canvas');
+var ctx2 = canvas.getContext('2d');
+var CW = canvas.width, CH = canvas.height;
+
+function dist(a,b) {
+  var dx = a.x-b.x, dy = a.y-b.y;
+  return Math.sqrt(dx*dx+dy*dy);
+}
+function cosSim(a, b) {
+  // approximate similarity from visual proximity: closer = more similar
+  return Math.max(0, 1 - dist(a,b) * 2.5);
+}
+
+function drawVec() {
+  ctx2.clearRect(0,0,CW,CH);
+  ctx2.fillStyle = 'rgba(0,0,0,.25)';
+  ctx2.fillRect(0,0,CW,CH);
+
+  if (selected) {
+    WORDS.forEach(function(w) {
+      if (w.word === selected.word) return;
+      var sim = cosSim(selected, w);
+      if (sim > 0.15) {
+        ctx2.beginPath();
+        ctx2.moveTo(selected.x*CW, selected.y*CH);
+        ctx2.lineTo(w.x*CW, w.y*CH);
+        ctx2.strokeStyle = 'rgba(167,139,250,' + (sim * 0.4) + ')';
+        ctx2.lineWidth = sim * 3;
+        ctx2.stroke();
+      }
+    });
+  }
+
+  WORDS.forEach(function(w) {
+    var isSel = selected && w.word === selected.word;
+    var sim = selected ? cosSim(selected, w) : 0.5;
+    var r = isSel ? 7 : 5;
+    ctx2.beginPath();
+    ctx2.arc(w.x*CW, w.y*CH, r, 0, Math.PI*2);
+    ctx2.fillStyle = w.color;
+    ctx2.globalAlpha = isSel ? 1 : (selected ? Math.max(0.2, sim + 0.3) : 0.85);
+    ctx2.fill();
+    ctx2.globalAlpha = 1;
+    ctx2.font = (isSel ? 'bold 13px' : '11px') + ' JetBrains Mono, monospace';
+    ctx2.fillStyle = isSel ? '#fff' : (selected ? ('rgba(255,255,255,'+(Math.max(0.3,sim+0.2))+')') : 'rgba(255,255,255,.75)');
+    ctx2.fillText(w.word, w.x*CW + 8, w.y*CH + 4);
+  });
+}
+
+canvas.addEventListener('click', function(e) {
+  var rect = canvas.getBoundingClientRect();
+  var scaleX = CW / rect.width;
+  var scaleY = CH / rect.height;
+  var mx = (e.clientX - rect.left) * scaleX;
+  var my = (e.clientY - rect.top) * scaleY;
+
+  var closest = null, bestD = 999;
+  WORDS.forEach(function(w) {
+    var d = Math.sqrt(Math.pow(mx - w.x*CW, 2) + Math.pow(my - w.y*CH, 2));
+    if (d < bestD) { bestD = d; closest = w; }
+  });
+
+  if (bestD < 30) {
+    selected = closest;
+    drawVec();
+    showSimilar(closest);
+    document.getElementById('exp-step').textContent = 'Query: "' + closest.word + '"';
+    document.getElementById('exp-text').textContent = 'You clicked "' + closest.word + '". The vector database finds all other words and ranks them by how close their position (vector) is to "' + closest.word + '". Words in the same cluster are most similar. This is exactly how RAG retrieval works — except with document chunks instead of single words.';
+  }
+});
+
+function showSimilar(word) {
+  var sims = WORDS.filter(function(w) { return w.word !== word.word; })
+    .map(function(w) { return { word:w.word, sim:cosSim(word,w), color:w.color }; })
+    .sort(function(a,b) { return b.sim - a.sim; })
+    .slice(0, 5);
+
+  var html = '<div style="font-family:var(--mono);font-size:12px;color:var(--faint);margin-bottom:8px;">Top 5 nearest neighbors to "' + word.word + '":</div>';
+  sims.forEach(function(s) {
+    var pct = Math.round(s.sim * 100);
+    html += '<div class="sim-bar"><div class="sim-label">' + s.word + '</div>';
+    html += '<div class="sim-track"><div class="sim-fill" style="width:'+pct+'%;background:'+s.color+';"></div></div>';
+    html += '<div class="sim-score" style="color:'+s.color+';">' + pct + '%</div></div>';
+  });
+  document.getElementById('sim-results').innerHTML = html;
+}
+
+drawVec();
+
+var HOW_STEPS = [
+  { num:'1', color:'var(--purple)', title:'Convert text to vector', desc:'Every piece of text is run through an embedding model. The embedding model is a neural network that outputs a list of ~1,500 numbers that encode the meaning of the text. "happy" → [0.12, -0.45, 0.78, ...]' },
+  { num:'2', color:'var(--cyan)',   title:'Store vectors in the DB', desc:'These number-lists (vectors) are stored in the vector database. Each vector is associated with the original text or document. The DB is indexed for fast nearest-neighbor search.' },
+  { num:'3', color:'var(--amber)',  title:'Query time: embed the question', desc:'When you search, your query text is also embedded into a vector using the same model. "How do I fix my car?" becomes [0.08, -0.41, 0.82, ...]' },
+  { num:'4', color:'var(--green)',  title:'Find nearest neighbors', desc:'The DB searches for stored vectors closest to your query vector. "Closest" = smallest cosine distance. This is called ANN (Approximate Nearest Neighbor) search — fast even with millions of vectors.' },
+  { num:'5', color:'var(--pink)',   title:'Return matching documents', desc:'The DB returns the top K most similar results. Even if words don\'t overlap, semantically similar content scores high. These results are then given to the AI as context (RAG).' },
+];
+
+function buildHow() {
+  var html = '';
+  HOW_STEPS.forEach(function(s) {
+    html += '<div style="display:flex;gap:14px;margin-bottom:14px;"><div style="flex:0 0 28px;height:28px;border-radius:50%;background:rgba(0,0,0,.4);border:2px solid '+s.color+';display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:11px;font-weight:700;color:'+s.color+';flex-shrink:0;">'+s.num+'</div><div><div style="font-family:var(--mono);font-size:13px;font-weight:700;color:'+s.color+';margin-bottom:4px;">'+s.title+'</div><div style="font-family:var(--mono);font-size:12px;color:var(--muted);line-height:1.6;">'+s.desc+'</div></div></div>';
+  });
+  document.getElementById('how-steps').innerHTML = html;
+}
+
+var DBS = [
+  { name:'Pinecone', color:'var(--green)', type:'Managed cloud', desc:'Most popular managed vector DB. Fully hosted, scales automatically, fast. Pay per use. Used by many AI startups.' },
+  { name:'Weaviate', color:'var(--cyan)', type:'Open source / cloud', desc:'Open source vector DB with GraphQL API. Supports hybrid search (keyword + vector). Can run locally.' },
+  { name:'Chroma', color:'var(--purple)', type:'Open source, local', desc:'Lightweight, runs in your Python app or locally. Great for prototyping RAG apps. Very easy to start with.' },
+  { name:'Qdrant', color:'var(--amber)', type:'Open source / cloud', desc:'High-performance, written in Rust. Very fast. Good for production use. Can filter on metadata too.' },
+  { name:'pgvector', color:'var(--pink)', type:'PostgreSQL extension', desc:'Adds vector search to regular Postgres. Great if you already use Postgres — no new service needed.' },
+  { name:'FAISS', color:'var(--faint)', type:'Facebook, in-memory', desc:'Facebook AI\'s library. Not a full DB — runs in-memory. Great for research and offline use. Very fast for ANN search.' },
+];
+
+function buildDBs() {
+  var html = '';
+  DBS.forEach(function(d) {
+    html += '<div class="db-card"><div class="db-name" style="color:'+d.color+';">'+d.name+'</div><div class="db-meta">'+d.type+'</div><div class="db-desc">'+d.desc+'</div></div>';
+  });
+  document.getElementById('dbs-list').innerHTML = html;
+}
+
+function setMode(m) {
+  ['vis','how','dbs'].forEach(function(x) {
+    document.getElementById('mode-'+x).style.display = x===m?'':'none';
+    document.getElementById('tab-'+x).classList.toggle('active', x===m);
+  });
+  if (m==='how') buildHow();
+  if (m==='dbs') buildDBs();
+  document.getElementById('stage-progress').textContent = m==='vis'?'Click any word to find similar words':m==='how'?'How vector search works':'Popular vector databases';
+}
+</script>
+<script>(function(){var c=document.getElementById('ai-canvas'),x=c.getContext('2d'),w,h,cols,drops;function r(){w=c.width=window.innerWidth;h=c.height=window.innerHeight;cols=Math.floor(w/16);drops=new Array(cols).fill(0).map(function(){return Math.floor(Math.random()*-60);});}r();window.addEventListener('resize',r);var f=0;function d(){f++;requestAnimationFrame(d);if(f%5!==0)return;x.fillStyle='rgba(6,1,15,0.1)';x.fillRect(0,0,w,h);x.font='12px JetBrains Mono,monospace';for(var i=0;i<cols;i++){x.fillStyle=Math.random()>.96?'rgba(56,189,248,0.18)':'rgba(56,189,248,0.04)';x.fillText('→',i*16,drops[i]*16);if(drops[i]*16>h&&Math.random()>.975)drops[i]=0;else drops[i]++;}}requestAnimationFrame(d);})();</script>
+<script src="../js/main.js"></script>
+</body>
+</html>

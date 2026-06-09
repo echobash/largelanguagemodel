@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Few-Shot Learning — llm-kit</title>
+  <link rel="stylesheet" href="../css/main.css" />
+  <style>
+    .shot-block { background:var(--bg2); border:1px solid var(--border2); border-radius:var(--r-xl); padding:16px 20px; margin-bottom:12px; font-family:var(--mono); font-size:12px; }
+    .shot-type  { font-size:10px; text-transform:uppercase; letter-spacing:.1em; margin-bottom:8px; }
+    .shot-ex    { padding:8px 12px; border-radius:var(--r-sm); margin-bottom:6px; border-left:3px solid; }
+    .shot-q { color:var(--cyan); }
+    .shot-a { color:var(--green); }
+    .shot-query { color:var(--purple); font-weight:700; font-size:13px; padding:10px 14px; background:rgba(167,139,250,.07); border-radius:var(--r-sm); margin-top:8px; border-left:3px solid var(--purple); }
+    .shot-out   { color:var(--text); padding:10px 14px; background:rgba(74,222,128,.06); border-radius:var(--r-sm); border-left:3px solid var(--green); margin-top:6px; }
+
+    .diff-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin:12px 0; }
+    @media(max-width:620px){ .diff-grid{grid-template-columns:1fr;} }
+    .diff-card { background:var(--bg2); border:2px solid var(--border2); border-radius:var(--r-xl); padding:14px; font-family:var(--mono); text-align:center; }
+  </style>
+</head>
+<body>
+<canvas id="ai-canvas" style="opacity:.15;"></canvas>
+<div class="grid-bg"></div>
+<div class="blob blob-2" style="opacity:.25;"></div>
+<nav class="nav scrolled">
+  <a class="nav-brand" href="../index.html"><span class="nav-brand-name">llm-kit</span><span class="nav-brand-by">@echobash</span></a>
+  <ul class="nav-links">
+    <li><a href="../index.html">home</a></li>
+    <li><a href="prompt.html">prompts</a></li>
+    <li><a href="cot.html">chain of thought</a></li>
+    <li><a href="few-shot.html" class="active">few-shot</a></li>
+  </ul>
+</nav>
+<div class="tool-wrap">
+  <div class="tool-title">few_shot_learning</div>
+  <div class="tool-sub">// Teaching AI by example — show 3 examples, it generalizes to new ones</div>
+
+  <div style="background:rgba(74,222,128,.06);border:1px solid rgba(74,222,128,.2);border-radius:var(--r-lg);padding:14px 18px;margin-bottom:24px;font-family:var(--mono);font-size:13px;color:var(--muted);line-height:1.7;">
+    💡 <strong style="color:var(--green);">The core idea:</strong> Instead of explaining the task in words, you just show examples. "Here are 3 correct examples. Now do this new one." The AI reads the pattern from your examples and applies it. Like teaching a new card game: instead of explaining rules, deal a few sample hands and say "see, like that." Works surprisingly well.
+  </div>
+
+  <div class="mode-tabs">
+    <button class="mode-tab active" id="tab-compare" onclick="setMode('compare')">0 vs 1 vs Few-Shot</button>
+    <button class="mode-tab" id="tab-live"    onclick="setMode('live')">Live Examples</button>
+    <button class="mode-tab" id="tab-tips"    onclick="setMode('tips')">When to Use Each</button>
+  </div>
+
+  <div class="stage">
+    <div class="stage-bar">
+      <div class="stage-bar-left"><span class="wp wp-r"></span><span class="wp wp-y"></span><span class="wp wp-g"></span></div>
+      <span class="stage-progress" id="stage-progress">Compare zero, one, and few-shot prompting</span>
+    </div>
+    <div class="stage-body" id="stage-body">
+
+      <div id="mode-compare">
+        <div class="diff-grid">
+          <div class="diff-card" style="border-color:rgba(248,113,113,.3);">
+            <div style="font-size:22px;margin-bottom:6px;">0️⃣</div>
+            <div style="font-size:14px;font-weight:700;color:var(--red);margin-bottom:6px;">Zero-Shot</div>
+            <div style="font-size:11px;color:var(--muted);line-height:1.5;text-align:left;">Just give the task. No examples. AI uses its training knowledge only.</div>
+            <div style="font-size:11px;color:var(--red);margin-top:8px;">Prompt: "Is this tweet positive or negative: 'This product is amazing!'"</div>
+          </div>
+          <div class="diff-card" style="border-color:rgba(251,191,36,.3);">
+            <div style="font-size:22px;margin-bottom:6px;">1️⃣</div>
+            <div style="font-size:14px;font-weight:700;color:var(--amber);margin-bottom:6px;">One-Shot</div>
+            <div style="font-size:11px;color:var(--muted);line-height:1.5;text-align:left;">Give 1 example before your question. Helps for tricky formats.</div>
+            <div style="font-size:11px;color:var(--amber);margin-top:8px;text-align:left;">Input: "I love it!" → Positive<br><br>Input: "This product is amazing!" → ?</div>
+          </div>
+          <div class="diff-card" style="border-color:rgba(74,222,128,.3);">
+            <div style="font-size:22px;margin-bottom:6px;">🔢</div>
+            <div style="font-size:14px;font-weight:700;color:var(--green);margin-bottom:6px;">Few-Shot (3-5)</div>
+            <div style="font-size:11px;color:var(--muted);line-height:1.5;text-align:left;">Show 3-5 examples. AI learns the exact pattern you want.</div>
+            <div style="font-size:11px;color:var(--green);margin-top:8px;text-align:left;">"I love it!" → Positive<br>"Terrible!" → Negative<br>"Meh." → Neutral<br><br>"Amazing!" → ?</div>
+          </div>
+        </div>
+        <div style="font-family:var(--mono);font-size:12px;color:var(--muted);line-height:1.7;margin-top:8px;">
+          <strong style="color:var(--purple);">Rule of thumb:</strong> Try zero-shot first. If the format or behavior is wrong, add 1 example. Still wrong? Add 2-4 more. Most tasks work well with 3-5 examples. Diminishing returns after ~10 examples.
+        </div>
+      </div>
+
+      <div id="mode-live" style="display:none;">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;" id="example-btns">
+          <button class="mode-tab active" onclick="showExample('classify', this)">Text classification</button>
+          <button class="mode-tab" onclick="showExample('extract', this)">Data extraction</button>
+          <button class="mode-tab" onclick="showExample('format', this)">Format conversion</button>
+          <button class="mode-tab" onclick="showExample('tone', this)">Tone matching</button>
+        </div>
+        <div id="example-content"></div>
+      </div>
+
+      <div id="mode-tips" style="display:none;">
+        <div id="tips-content"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="explain-panel">
+    <div class="explain-step" id="exp-step">Why does few-shot work?</div>
+    <div class="explain-text" id="exp-text">LLMs were trained on patterns in text. When you show examples like "X → Y, A → B, M → ?", the model recognizes this as a pattern-matching task and applies the pattern. It's not "learning" in the training sense — it's in-context learning: using examples in the prompt to understand the task format at inference time.</div>
+    <div class="explain-tags" id="exp-tags"><span class="tag tag-g">3-5 EXAMPLES IS USUALLY ENOUGH</span><span class="tag tag-p">SHOW, DON'T TELL</span></div>
+  </div>
+</div><!-- ── Also by echobash strip ── -->
+<div class="also-strip">
+  <div class="also-inner">
+    <span class="also-label">also by echobash</span>
+    <div class="also-divider"></div>
+    <div class="also-links">
+      <a href="https://devdunia.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--cyan);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">devdunia</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">networking tools</span>
+      </a>
+      <a href="https://echobash.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--purple);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">echobash</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">portfolio</span>
+      </a>
+      <a href="https://promptflix.in" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--amber);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">promptflix</span><span class="also-link-tld">.in</span>
+        <span class="also-link-sub">prompt library</span>
+      </a>
+    </div>
+  </div>
+</div>
+<footer class="footer">
+  <p>built by echobash &nbsp;·&nbsp; <a href="https://devdunia.com" target="_blank" rel="noopener">devdunia.com</a> &nbsp;·&nbsp; <a href="https://echobash.com" target="_blank" rel="noopener">echobash.com</a> &nbsp;·&nbsp; <a href="https://promptflix.in" target="_blank" rel="noopener">promptflix.in</a></p>
+  <p style="margin-top:4px;">llm-kit is open source — AI tools for everyone</p>
+</footer>
+<script>
+var EXAMPLES = {
+  classify: {
+    title:'Sentiment Classification',
+    desc:'Instead of explaining "classify as positive/negative/neutral", just show examples:',
+    examples:[
+      { q:'Input: "The food was incredible, best meal ever!"', a:'Output: POSITIVE' },
+      { q:'Input: "Waited 2 hours, food was cold and terrible."', a:'Output: NEGATIVE' },
+      { q:'Input: "It was fine. Nothing special."', a:'Output: NEUTRAL' },
+    ],
+    query:'"Input: The service was quick but the coffee was a bit bitter."',
+    output:'Output: NEUTRAL'
+  },
+  extract: {
+    title:'Data Extraction',
+    desc:'Show the AI the exact JSON format you want — much clearer than describing it in words:',
+    examples:[
+      { q:'Text: "John Smith called on Jan 5th about his order #4521"', a:'{"name":"John Smith","date":"Jan 5","order":"#4521"}' },
+      { q:'Text: "Sarah Lee emailed Feb 12 regarding invoice #8874"', a:'{"name":"Sarah Lee","date":"Feb 12","order":"#8874"}' },
+    ],
+    query:'"Text: "Mike Johnson called Mar 3rd about his ticket #3310""',
+    output:'{"name":"Mike Johnson","date":"Mar 3","order":"#3310"}'
+  },
+  format: {
+    title:'Format Conversion',
+    desc:'Showing the exact input→output format eliminates ambiguity:',
+    examples:[
+      { q:'Input: "2024-01-15"', a:'Output: "January 15, 2024"' },
+      { q:'Input: "2023-11-03"', a:'Output: "November 3, 2023"' },
+      { q:'Input: "2024-07-04"', a:'Output: "July 4, 2024"' },
+    ],
+    query:'"Input: "2025-03-22""',
+    output:'"March 22, 2025"'
+  },
+  tone: {
+    title:'Tone Matching',
+    desc:'Show 3 examples of a specific brand voice to lock in tone:',
+    examples:[
+      { q:'Product: "Running shoes"', a:'Copy: "Hit the pavement like it owes you something. 🔥"' },
+      { q:'Product: "Protein bars"', a:'Copy: "Fuel the grind. No excuses. Just gains."' },
+    ],
+    query:'"Product: "Gym water bottle""',
+    output:'Copy: "Hydrate like a champion. Every rep counts. 💧"'
+  },
+};
+
+function showExample(key, btn) {
+  document.querySelectorAll('#example-btns .mode-tab').forEach(function(b) { b.classList.remove('active'); });
+  btn.classList.add('active');
+  var ex = EXAMPLES[key];
+  var html = '<div class="shot-block">';
+  html += '<div class="shot-type" style="color:var(--purple);">TASK: '+ex.title+'</div>';
+  html += '<div style="font-size:12px;color:var(--muted);margin-bottom:10px;">'+ex.desc+'</div>';
+  ex.examples.forEach(function(e, i) {
+    html += '<div class="shot-ex" style="border-color:rgba(56,189,248,.3);background:rgba(56,189,248,.04);margin-bottom:6px;">';
+    html += '<div class="shot-q">'+e.q+'</div><div class="shot-a">'+e.a+'</div></div>';
+  });
+  html += '<div class="shot-query">Your query: '+ex.query+'</div>';
+  html += '<div class="shot-out">AI output: '+ex.output+'</div>';
+  html += '</div>';
+  document.getElementById('example-content').innerHTML = html;
+}
+showExample('classify', document.querySelector('#example-btns .mode-tab'));
+
+var TIPS_DATA = [
+  { title:'Use zero-shot first', color:'var(--cyan)', desc:'Always try asking without examples first. Most frontier models (GPT-4, Claude 3.7) are strong enough to do many tasks without examples. Only add examples if zero-shot gives wrong format or wrong behavior.' },
+  { title:'Cover edge cases in examples', color:'var(--green)', desc:'Don\'t just show "obvious" examples. Show the cases that are tricky or ambiguous. If your task might have neutral sentiment, include a neutral example. If there\'s a common mistake, show the correct version.' },
+  { title:'Keep examples consistent', color:'var(--purple)', desc:'Your examples should all use the exact same format. If you mix "Output: positive" and "Positive" in different examples, the AI will be confused about what format to use.' },
+  { title:'Order matters (a little)', color:'var(--amber)', desc:'Research shows the last example has slightly more influence. Put your "most typical" example last. Also, avoid patterns in order that might be misleading (e.g., 3 positives in a row might bias the AI toward positive).' },
+  { title:'Examples must be correct', color:'var(--red)', desc:'If you have a wrong example, the AI will learn and replicate that mistake. Always double-check your examples are accurate. Bad few-shot examples are worse than no examples.' },
+];
+
+function buildTips() {
+  var html = '';
+  TIPS_DATA.forEach(function(t, i) {
+    html += '<div style="display:flex;gap:12px;margin-bottom:12px;"><div style="flex:0 0 26px;height:26px;border-radius:50%;background:rgba(0,0,0,.4);border:2px solid '+t.color+';display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:11px;font-weight:700;color:'+t.color+';flex-shrink:0;">'+(i+1)+'</div><div><div style="font-family:var(--mono);font-size:13px;font-weight:700;color:'+t.color+';margin-bottom:4px;">'+t.title+'</div><div style="font-family:var(--mono);font-size:12px;color:var(--muted);line-height:1.6;">'+t.desc+'</div></div></div>';
+  });
+  document.getElementById('tips-content').innerHTML = html;
+}
+
+function setMode(m) {
+  ['compare','live','tips'].forEach(function(x) {
+    document.getElementById('mode-'+x).style.display = x===m?'':'none';
+    document.getElementById('tab-'+x).classList.toggle('active', x===m);
+  });
+  if (m==='tips') buildTips();
+  document.getElementById('stage-progress').textContent = m==='compare'?'Compare zero, one, and few-shot':m==='live'?'Live few-shot examples':'Tips for effective few-shot prompting';
+}
+</script>
+<script>(function(){var c=document.getElementById('ai-canvas'),x=c.getContext('2d'),w,h,cols,drops;function r(){w=c.width=window.innerWidth;h=c.height=window.innerHeight;cols=Math.floor(w/16);drops=new Array(cols).fill(0).map(function(){return Math.floor(Math.random()*-60);});}r();window.addEventListener('resize',r);var f=0;function d(){f++;requestAnimationFrame(d);if(f%5!==0)return;x.fillStyle='rgba(6,1,15,0.1)';x.fillRect(0,0,w,h);x.font='12px JetBrains Mono,monospace';for(var i=0;i<cols;i++){x.fillStyle=Math.random()>.96?'rgba(74,222,128,0.18)':'rgba(74,222,128,0.04)';x.fillText(Math.random()>.5?'1':'3',i*16,drops[i]*16);if(drops[i]*16>h&&Math.random()>.975)drops[i]=0;else drops[i]++;}}requestAnimationFrame(d);})();</script>
+<script src="../js/main.js"></script>
+</body>
+</html>

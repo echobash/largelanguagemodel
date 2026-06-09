@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Temperature & Sampling — llm-kit</title>
+  <link rel="stylesheet" href="../css/main.css" />
+  <style>
+    .temp-slider-wrap { margin:16px 0; }
+    .temp-slider { width:100%; accent-color:var(--amber); height:6px; cursor:pointer; }
+    .temp-labels { display:flex; justify-content:space-between; font-family:var(--mono); font-size:11px; color:var(--faint); margin-top:6px; }
+    .temp-display { font-family:var(--mono); font-size:28px; font-weight:700; color:var(--amber); margin:12px 0 4px; }
+    .temp-mode-label { font-family:var(--mono); font-size:13px; }
+
+    .prob-vis { display:flex; flex-direction:column; gap:8px; margin:16px 0; }
+    .pv-row { display:flex; align-items:center; gap:10px; }
+    .pv-word { font-family:var(--mono); font-size:13px; font-weight:600; width:100px; }
+    .pv-bar-wrap { flex:1; background:var(--bg3); border-radius:99px; height:12px; overflow:hidden; }
+    .pv-fill { height:100%; border-radius:99px; transition:width .5s var(--ease); }
+    .pv-pct { font-family:var(--mono); font-size:12px; width:44px; text-align:right; }
+
+    .gen-examples { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:12px; margin:16px 0; }
+    .gen-ex {
+      background:var(--bg2); border:1px solid var(--border2); border-radius:var(--r-lg);
+      padding:14px; font-family:var(--mono); font-size:12px;
+    }
+    .gen-ex-label { font-size:10px; text-transform:uppercase; letter-spacing:.1em; color:var(--faint); margin-bottom:6px; }
+    .gen-ex-temp { font-size:18px; font-weight:700; margin-bottom:8px; }
+    .gen-ex-text { color:var(--muted); line-height:1.6; }
+
+    .param-cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:12px; margin:16px 0; }
+    .param-card { background:var(--bg2); border:1px solid var(--border2); border-radius:var(--r-lg); padding:16px; }
+    .param-card-name { font-family:var(--mono); font-size:13px; font-weight:700; margin-bottom:6px; }
+    .param-card-desc { font-family:var(--mono); font-size:12px; color:var(--muted); line-height:1.5; }
+    .param-card-ex { margin-top:8px; font-family:var(--mono); font-size:11px; color:var(--cyan); }
+  </style>
+</head>
+<body>
+<canvas id="ai-canvas" style="opacity:.15;"></canvas>
+<div class="grid-bg"></div>
+<div class="blob blob-3" style="opacity:.25;"></div>
+<nav class="nav scrolled">
+  <a class="nav-brand" href="../index.html"><span class="nav-brand-name">llm-kit</span><span class="nav-brand-by">@echobash</span></a>
+  <ul class="nav-links">
+    <li><a href="../index.html">home</a></li>
+    <li><a href="llm.html">llm</a></li>
+    <li><a href="temperature.html" class="active">temperature</a></li>
+    <li><a href="prompt.html">prompts</a></li>
+  </ul>
+</nav>
+<div class="tool-wrap">
+  <div class="tool-title">temperature</div>
+  <div class="tool-sub">// How "creative" vs "precise" you want the AI to be</div>
+
+  <div style="background:rgba(251,191,36,.06);border:1px solid rgba(251,191,36,.2);border-radius:var(--r-lg);padding:14px 18px;margin-bottom:24px;font-family:var(--mono);font-size:13px;color:var(--muted);line-height:1.7;">
+    💡 <strong style="color:var(--amber);">The core idea:</strong> Temperature controls how random the AI's word choices are. Low temperature (0.1) = very predictable, always picks the safest word. High temperature (1.5) = very creative, sometimes picks surprising or unusual words. Temperature 0.7 is a sweet spot for most tasks.
+  </div>
+
+  <div class="mode-tabs">
+    <button class="mode-tab active" id="tab-slider" onclick="setMode('slider')">Temperature Slider</button>
+    <button class="mode-tab" id="tab-params" onclick="setMode('params')">All Sampling Params</button>
+  </div>
+
+  <div class="stage">
+    <div class="stage-bar">
+      <div class="stage-bar-left"><span class="wp wp-r"></span><span class="wp wp-y"></span><span class="wp wp-g"></span></div>
+      <span class="stage-progress" id="stage-progress">Drag the slider to change temperature</span>
+    </div>
+    <div class="stage-body" id="stage-body">
+
+      <!-- Slider mode -->
+      <div id="mode-slider">
+        <div style="font-family:var(--mono);font-size:13px;color:var(--muted);margin-bottom:16px;">Prompt: <span style="color:var(--purple);">"Once upon a time, there was a"</span></div>
+
+        <div class="temp-slider-wrap">
+          <div class="temp-display" id="temp-val">0.7</div>
+          <div class="temp-mode-label" id="temp-mode" style="color:var(--amber);">Balanced (default)</div>
+          <input class="temp-slider" type="range" id="temp-slider" min="0" max="200" value="70" oninput="updateTemp(this.value)">
+          <div class="temp-labels">
+            <span>0 — Robotic</span>
+            <span>0.7 — Default</span>
+            <span>1.0 — Creative</span>
+            <span>2.0 — Chaotic</span>
+          </div>
+        </div>
+
+        <div style="font-family:var(--mono);font-size:12px;color:var(--faint);margin-bottom:8px;">NEXT WORD PROBABILITIES — How likely is each word?</div>
+        <div class="prob-vis" id="prob-vis"></div>
+
+        <div style="font-family:var(--mono);font-size:12px;color:var(--faint);margin-top:12px;margin-bottom:8px;">WHAT THE AI MIGHT SAY</div>
+        <div id="gen-output" style="font-family:var(--mono);font-size:13px;color:var(--muted);background:rgba(0,0,0,.25);border-radius:var(--r-lg);padding:14px;border:1px solid var(--border);min-height:50px;"></div>
+      </div>
+
+      <!-- Params mode -->
+      <div id="mode-params" style="display:none;">
+        <div class="param-cards" id="param-cards"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="explain-panel">
+    <div class="explain-step" id="exp-step">What is Temperature?</div>
+    <div class="explain-text" id="exp-text">Imagine temperature like a dial on a slot machine. At 0, the machine always gives the same result — safe and predictable. At 2.0, it spins wildly — very creative but sometimes nonsensical. For coding tasks, use low temperature (0.2). For creative writing, use higher temperature (0.8-1.0).</div>
+    <div class="explain-tags" id="exp-tags"><span class="tag tag-a">CODE: 0.2</span><span class="tag tag-p">CHAT: 0.7</span><span class="tag tag-k">CREATIVE: 1.0+</span></div>
+  </div>
+</div><!-- ── Also by echobash strip ── -->
+<div class="also-strip">
+  <div class="also-inner">
+    <span class="also-label">also by echobash</span>
+    <div class="also-divider"></div>
+    <div class="also-links">
+      <a href="https://devdunia.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--cyan);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">devdunia</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">networking tools</span>
+      </a>
+      <a href="https://echobash.com" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--purple);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">echobash</span><span class="also-link-tld">.com</span>
+        <span class="also-link-sub">portfolio</span>
+      </a>
+      <a href="https://promptflix.in" target="_blank" rel="noopener"
+         class="also-link" style="--al-color:var(--amber);">
+        <span class="also-link-dot"></span>
+        <span class="also-link-name">promptflix</span><span class="also-link-tld">.in</span>
+        <span class="also-link-sub">prompt library</span>
+      </a>
+    </div>
+  </div>
+</div>
+<footer class="footer">
+  <p>built by echobash &nbsp;·&nbsp; <a href="https://devdunia.com" target="_blank" rel="noopener">devdunia.com</a> &nbsp;·&nbsp; <a href="https://echobash.com" target="_blank" rel="noopener">echobash.com</a> &nbsp;·&nbsp; <a href="https://promptflix.in" target="_blank" rel="noopener">promptflix.in</a></p>
+  <p style="margin-top:4px;">llm-kit is open source — AI tools for everyone</p>
+</footer>
+<script>
+var mode = 'slider';
+var BASE_PROBS = [
+  { word:'dragon',   base:0.22, color:'rgba(167,139,250,' },
+  { word:'princess', base:0.19, color:'rgba(56,189,248,' },
+  { word:'village',  base:0.15, color:'rgba(74,222,128,' },
+  { word:'lonely',   base:0.13, color:'rgba(251,191,36,' },
+  { word:'brave',    base:0.11, color:'rgba(244,114,182,' },
+  { word:'young',    base:0.09, color:'rgba(167,139,250,' },
+  { word:'strange',  base:0.06, color:'rgba(248,113,113,' },
+  { word:'dancing',  base:0.03, color:'rgba(56,189,248,' },
+  { word:'💀',        base:0.02, color:'rgba(248,113,113,' },
+];
+
+var GEN_EXAMPLES = {
+  '0':   '"Once upon a time, there was a dragon who lived in a mountain."',
+  '0.3': '"Once upon a time, there was a brave princess who guarded a village."',
+  '0.7': '"Once upon a time, there was a lonely dragon who longed for friendship."',
+  '1.0': '"Once upon a time, there was a strange creature that danced between the stars."',
+  '1.5': '"Once upon a time, there was a 💀 village that breathed fire and laughed backwards."',
+  '2.0': '"Once upon a time, there was a dancing banana princess who 💀 strange young brave strange."',
+};
+
+function applyTemp(prob, temp) {
+  if (temp < 0.01) return prob >= 0.22 ? 1 : 0;
+  var logit = Math.log(prob);
+  var scaled = logit / temp;
+  return Math.exp(scaled);
+}
+
+function softmax(vals) {
+  var sum = vals.reduce(function(a,b){return a+b;}, 0);
+  return vals.map(function(v){return v/sum;});
+}
+
+function updateTemp(v) {
+  var temp = v / 100;
+  document.getElementById('temp-val').textContent = temp.toFixed(1);
+
+  var label, color;
+  if (temp < 0.2) { label='Deterministic — always picks safest word'; color='var(--cyan)'; }
+  else if (temp < 0.5) { label='Conservative — reliable, predictable'; color='var(--green)'; }
+  else if (temp < 0.9) { label='Balanced — default for most uses'; color='var(--amber)'; }
+  else if (temp < 1.3) { label='Creative — varied, interesting responses'; color='var(--purple)'; }
+  else if (temp < 1.7) { label='Wild — surprising, sometimes strange'; color='var(--pink)'; }
+  else { label='Chaotic — often incoherent, random'; color='var(--red)'; }
+  document.getElementById('temp-mode').textContent = label;
+  document.getElementById('temp-mode').style.color = color;
+
+  var raw = BASE_PROBS.map(function(p) { return applyTemp(p.base, temp || 0.001); });
+  var probs = softmax(raw);
+
+  var html = '';
+  BASE_PROBS.forEach(function(p, i) {
+    var pct = Math.round(probs[i] * 100);
+    html += '<div class="pv-row">';
+    html += '<div class="pv-word">'+p.word+'</div>';
+    html += '<div class="pv-bar-wrap"><div class="pv-fill" style="width:'+pct+'%;background:'+p.color+'0.7);"></div></div>';
+    html += '<div class="pv-pct" style="color:'+p.color+'0.8);">'+pct+'%</div>';
+    html += '</div>';
+  });
+  document.getElementById('prob-vis').innerHTML = html;
+
+  var closest = '0.7', minD = Infinity;
+  Object.keys(GEN_EXAMPLES).forEach(function(k) { var d = Math.abs(parseFloat(k) - temp); if(d<minD){minD=d;closest=k;} });
+  document.getElementById('gen-output').textContent = GEN_EXAMPLES[closest];
+
+  document.getElementById('stage-progress').textContent = 'Temperature: ' + temp.toFixed(1) + ' — ' + label;
+  document.getElementById('exp-step').textContent = 'Temperature ' + temp.toFixed(1) + ': ' + label;
+  if (temp < 0.3) {
+    document.getElementById('exp-text').textContent = 'At temperature ' + temp.toFixed(1) + ', the AI almost always picks the single most likely word. Good for: factual Q&A, code generation, data extraction. Bad for: creative writing (sounds robotic).';
+  } else if (temp < 0.8) {
+    document.getElementById('exp-text').textContent = 'Temperature ' + temp.toFixed(1) + ' is the sweet spot for most uses. The AI mostly picks likely words but sometimes picks interesting alternatives. Good for: chatbots, assistants, summarization.';
+  } else if (temp < 1.3) {
+    document.getElementById('exp-text').textContent = 'At temperature ' + temp.toFixed(1) + ', the AI gets creative. Probabilities are more spread out — it might pick a surprising but relevant word. Good for: creative writing, brainstorming, poetry.';
+  } else {
+    document.getElementById('exp-text').textContent = 'At temperature ' + temp.toFixed(1) + ', the AI is very random. Low-probability words get picked more often. The output can be surprising or entertaining but often becomes nonsensical at high values. Generally not recommended for practical use.';
+  }
+}
+
+var PARAMS = [
+  { name:'temperature', desc:'Controls randomness. Low (0.1) = predictable. High (1.5) = creative. 0.7 is the default.', ex:'temperature: 0.7' },
+  { name:'top_p (nucleus)', desc:'Only consider words whose probabilities add up to p. top_p=0.9 means only consider the top 90% most likely words, ignoring the long tail of weird options.', ex:'top_p: 0.95' },
+  { name:'top_k', desc:'Only consider the top k most likely words. top_k=40 means only consider the 40 most likely next words, ignoring all others.', ex:'top_k: 40' },
+  { name:'max_tokens', desc:'Maximum number of words/tokens to generate. Set this to control response length.', ex:'max_tokens: 1000' },
+  { name:'stop sequences', desc:'Tell the AI to stop generating when it hits a certain word or phrase. Useful for structured output.', ex:'stop: ["END", "\\n\\n"]' },
+  { name:'frequency_penalty', desc:'Penalizes words that have been used already. Reduces repetition. 0 = no penalty, 2 = strong penalty.', ex:'frequency_penalty: 0.5' },
+  { name:'presence_penalty', desc:'Penalizes any word that has appeared at all (even once). Encourages the AI to talk about new topics.', ex:'presence_penalty: 0.3' },
+  { name:'seed', desc:'If you want the same output every time, set a seed number. Same prompt + same seed = same output. Useful for testing.', ex:'seed: 42' },
+];
+
+function buildParams() {
+  var html = '';
+  PARAMS.forEach(function(p) {
+    html += '<div class="param-card">';
+    html += '<div class="param-card-name" style="color:var(--amber);">'+p.name+'</div>';
+    html += '<div class="param-card-desc">'+p.desc+'</div>';
+    html += '<div class="param-card-ex">'+p.ex+'</div>';
+    html += '</div>';
+  });
+  document.getElementById('param-cards').innerHTML = html;
+}
+
+function setMode(m) {
+  mode = m;
+  document.getElementById('tab-slider').classList.toggle('active', m==='slider');
+  document.getElementById('tab-params').classList.toggle('active', m==='params');
+  document.getElementById('mode-slider').style.display = m==='slider' ? '' : 'none';
+  document.getElementById('mode-params').style.display = m==='params' ? '' : 'none';
+  if (m === 'params') { buildParams(); document.getElementById('exp-step').textContent='All Sampling Parameters'; document.getElementById('exp-text').textContent='Besides temperature, there are several other knobs to control AI output. top_p and top_k limit which words the AI can pick from. max_tokens controls length. These all work together — most AI APIs like OpenAI, Anthropic, and Google expose these settings.'; }
+}
+
+updateTemp(70);
+</script>
+<script>(function(){var c=document.getElementById('ai-canvas'),x=c.getContext('2d'),w,h,cols,drops;function r(){w=c.width=window.innerWidth;h=c.height=window.innerHeight;cols=Math.floor(w/16);drops=new Array(cols).fill(0).map(function(){return Math.floor(Math.random()*-60);});}r();window.addEventListener('resize',r);var f=0;function d(){f++;requestAnimationFrame(d);if(f%5!==0)return;x.fillStyle='rgba(6,1,15,0.1)';x.fillRect(0,0,w,h);x.font='12px JetBrains Mono,monospace';for(var i=0;i<cols;i++){x.fillStyle=Math.random()>.96?'rgba(251,191,36,0.2)':'rgba(251,191,36,0.04)';x.fillText('T',i*16,drops[i]*16);if(drops[i]*16>h&&Math.random()>.975)drops[i]=0;else drops[i]++;}}requestAnimationFrame(d);})();</script>
+<script src="../js/main.js"></script>
+</body>
+</html>
