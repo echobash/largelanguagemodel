@@ -224,6 +224,22 @@
     .tool-search-empty a:hover { text-decoration: underline; }
     .tool-card { transition: opacity .18s, transform .18s; }
     .tool-card.ts-hidden { display: none; }
+
+    /* ── Expand row ── */
+    .tools-expand-row {
+      display: flex; align-items: center; gap: 14px;
+      margin-top: 20px; flex-wrap: wrap;
+    }
+    .tools-expand-btn {
+      font-family: var(--mono); font-size: 12px; font-weight: 700;
+      color: var(--purple); background: rgba(167,139,250,.08);
+      border: 1px solid rgba(167,139,250,.25); border-radius: var(--r-xl);
+      padding: 9px 18px; cursor: pointer; white-space: nowrap;
+      transition: background .2s, border-color .2s;
+      flex-shrink: 0;
+    }
+    .tools-expand-btn:hover { background: rgba(167,139,250,.15); border-color: rgba(167,139,250,.45); }
+    .tools-expand-sep { font-family: var(--mono); font-size: 12px; color: var(--border2); flex-shrink: 0; }
   </style>
 </head>
 <body>
@@ -240,6 +256,7 @@
     <span class="nav-brand-by">@echobash</span>
   </a>
   <ul class="nav-links">
+    <li><a href="llm_decode.html">decode llm ✦</a></li>
     <li><a href="tools/llm.html">llm</a></li>
     <li><a href="tools/transformer.html">transformer</a></li>
     <li><a href="tools/rag.html">rag</a></li>
@@ -266,8 +283,8 @@
         all visualized step-by-step in the browser. No installs, no signup.
       </p>
       <div class="hero-ctas anim-up-4">
-        <a href="#tools" class="btn btn-primary" onclick="document.getElementById('tools').scrollIntoView({behavior:'smooth'});return false;">explore tools ↓</a>
-        <a href="tools/glossary.html" class="btn btn-ghost">ai glossary ↗</a>
+        <a href="llm_decode.html" class="btn btn-primary">what is an LLM? ✦</a>
+        <a href="#tools" class="btn btn-ghost" onclick="document.getElementById('tools').scrollIntoView({behavior:'smooth'});return false;">explore tools ↓</a>
       </div>
       <div class="hero-stats anim-up-4">
         <div>
@@ -359,7 +376,7 @@
         <span class="tool-search-icon">⌕</span>
         <input class="tool-search-input" id="tool-search" type="text"
                autocomplete="off" spellcheck="false" placeholder="search 30 tools...">
-        <span class="tool-search-count" id="ts-count">30 tools</span>
+        <span class="tool-search-count" id="ts-count"></span>
         <kbd class="tool-search-kbd">⌘K</kbd>
       </div>
       <div class="tool-search-empty" id="ts-empty" style="display:none;">
@@ -369,14 +386,7 @@
 
     <div class="tool-grid" id="tool-grid">
 
-      <a href="tools/llm.html" class="tool-card" style="--tc-color: var(--purple);">
-        <div class="tool-card-bg">input → tokens<br>embedding → attn<br>softmax → output</div>
-        <div class="tool-card-icon">🧠</div>
-        <div class="tool-card-name">How LLMs Work</div>
-        <div class="tool-card-desc">Step through token prediction — from input text to probability distribution to output.</div>
-        <span class="tool-card-link">open tool →</span>
-      </a>
-
+      <!-- ── all 30 tools ── -->
       <a href="tools/transformer.html" class="tool-card" style="--tc-color: var(--cyan);">
         <div class="tool-card-bg">embed → Q,K,V<br>attention heads<br>FFN → LayerNorm</div>
         <div class="tool-card-icon">⚙️</div>
@@ -385,19 +395,11 @@
         <span class="tool-card-link">open tool →</span>
       </a>
 
-      <a href="tools/attention.html" class="tool-card" style="--tc-color: var(--pink);">
-        <div class="tool-card-bg">Q · Kᵀ / √d<br>softmax → weights<br>weighted sum V</div>
-        <div class="tool-card-icon">👁️</div>
-        <div class="tool-card-name">Attention Mechanism</div>
-        <div class="tool-card-desc">Visualize how tokens attend to each other — Query, Key, Value matrices and attention scores.</div>
-        <span class="tool-card-link">open tool →</span>
-      </a>
-
-      <a href="tools/tokens.html" class="tool-card" style="--tc-color: var(--amber);">
-        <div class="tool-card-bg">hello → [15339]<br>world → [1917]<br>BPE · WordPiece</div>
-        <div class="tool-card-icon">🔤</div>
-        <div class="tool-card-name">Tokenization</div>
-        <div class="tool-card-desc">See how text breaks into tokens — BPE, subword splitting, token IDs, and vocabulary.</div>
+      <a href="tools/hallucination.html" class="tool-card" style="--tc-color: var(--red);">
+        <div class="tool-card-bg">high confidence →<br>wrong answer<br>factual drift</div>
+        <div class="tool-card-icon">🌀</div>
+        <div class="tool-card-name">Hallucination</div>
+        <div class="tool-card-desc">Why LLMs confidently produce false facts — probability collapse, training bias, and mitigations.</div>
         <span class="tool-card-link">open tool →</span>
       </a>
 
@@ -422,6 +424,39 @@
         <div class="tool-card-icon">📐</div>
         <div class="tool-card-name">Embeddings</div>
         <div class="tool-card-desc">How words become vectors — semantic similarity, cosine distance, and the famous king-queen analogy.</div>
+        <span class="tool-card-link">open tool →</span>
+      </a>
+
+      <a href="tools/temperature.html" class="tool-card" style="--tc-color: var(--amber);">
+        <div class="tool-card-bg">temp=0 → greedy<br>temp=1 → sample<br>top-p · top-k</div>
+        <div class="tool-card-icon">🌡️</div>
+        <div class="tool-card-name">Temperature & Sampling</div>
+        <div class="tool-card-desc">How temperature, top-p, top-k, and repetition penalty control output randomness and quality.</div>
+        <span class="tool-card-link">open tool →</span>
+      </a>
+
+
+      <a href="tools/llm.html" class="tool-card" style="--tc-color: var(--purple);">
+        <div class="tool-card-bg">input → tokens<br>embedding → attn<br>softmax → output</div>
+        <div class="tool-card-icon">🧠</div>
+        <div class="tool-card-name">How LLMs Work</div>
+        <div class="tool-card-desc">Step through token prediction — from input text to probability distribution to output.</div>
+        <span class="tool-card-link">open tool →</span>
+      </a>
+
+      <a href="tools/attention.html" class="tool-card" style="--tc-color: var(--pink);">
+        <div class="tool-card-bg">Q · Kᵀ / √d<br>softmax → weights<br>weighted sum V</div>
+        <div class="tool-card-icon">👁️</div>
+        <div class="tool-card-name">Attention Mechanism</div>
+        <div class="tool-card-desc">Visualize how tokens attend to each other — Query, Key, Value matrices and attention scores.</div>
+        <span class="tool-card-link">open tool →</span>
+      </a>
+
+      <a href="tools/tokens.html" class="tool-card" style="--tc-color: var(--amber);">
+        <div class="tool-card-bg">hello → [15339]<br>world → [1917]<br>BPE · WordPiece</div>
+        <div class="tool-card-icon">🔤</div>
+        <div class="tool-card-name">Tokenization</div>
+        <div class="tool-card-desc">See how text breaks into tokens — BPE, subword splitting, token IDs, and vocabulary.</div>
         <span class="tool-card-link">open tool →</span>
       </a>
 
@@ -457,14 +492,6 @@
         <span class="tool-card-link">open tool →</span>
       </a>
 
-      <a href="tools/temperature.html" class="tool-card" style="--tc-color: var(--amber);">
-        <div class="tool-card-bg">temp=0 → greedy<br>temp=1 → sample<br>top-p · top-k</div>
-        <div class="tool-card-icon">🌡️</div>
-        <div class="tool-card-name">Temperature & Sampling</div>
-        <div class="tool-card-desc">How temperature, top-p, top-k, and repetition penalty control output randomness and quality.</div>
-        <span class="tool-card-link">open tool →</span>
-      </a>
-
       <a href="tools/context.html" class="tool-card" style="--tc-color: var(--cyan);">
         <div class="tool-card-bg">system [512]<br>history [2048]<br>new [128] | 128K</div>
         <div class="tool-card-icon">📏</div>
@@ -478,14 +505,6 @@
         <div class="tool-card-icon">🧩</div>
         <div class="tool-card-name">Chain of Thought</div>
         <div class="tool-card-desc">Why CoT works — scratchpad reasoning, zero-shot CoT, tree-of-thought, and self-consistency.</div>
-        <span class="tool-card-link">open tool →</span>
-      </a>
-
-      <a href="tools/hallucination.html" class="tool-card" style="--tc-color: var(--red);">
-        <div class="tool-card-bg">high confidence →<br>wrong answer<br>factual drift</div>
-        <div class="tool-card-icon">🌀</div>
-        <div class="tool-card-name">Hallucination</div>
-        <div class="tool-card-desc">Why LLMs confidently produce false facts — probability collapse, training bias, and mitigations.</div>
         <span class="tool-card-link">open tool →</span>
       </a>
 
@@ -840,13 +859,12 @@ window.setHeroText = function(el) {
 
 // ── Tool search ──
 (function () {
-  const input  = document.getElementById('tool-search');
+  const input   = document.getElementById('tool-search');
   const countEl = document.getElementById('ts-count');
   const emptyEl = document.getElementById('ts-empty');
-  const cards  = Array.from(document.querySelectorAll('.tool-card'));
-  const TOTAL  = cards.length;
+  const cards   = Array.from(document.querySelectorAll('.tool-card'));
+  const TOTAL   = cards.length;
 
-  // Build a searchable string per card (name + desc + bg keywords)
   const data = cards.map(c => ({
     el: c,
     text: [
@@ -884,38 +902,25 @@ window.setHeroText = function(el) {
     emptyEl.style.display = (q && shown === 0) ? '' : 'none';
   }
 
-  window.tsClear = function () {
-    input.value = '';
-    run();
-    input.focus();
-  };
+  window.tsClear = function () { input.value = ''; run(); input.focus(); };
 
   input.addEventListener('input', run);
 
-  // ⌘K / Ctrl+K focuses; Escape clears + blurs
   document.addEventListener('keydown', function (e) {
     if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-      e.preventDefault();
-      input.focus();
-      input.select();
+      e.preventDefault(); input.focus(); input.select();
     }
     if (e.key === 'Escape' && document.activeElement === input) {
-      tsClear();
-      input.blur();
+      tsClear(); input.blur();
     }
   });
 
-  // Animated placeholder typewriter
-  const hints = ['attention', 'RAG', 'fine-tuning', 'LoRA', 'agents', 'tokenization', 'quantization', 'diffusion', 'RLHF', 'embeddings'];
+  const hints = ['attention', 'RAG', 'LoRA', 'agents', 'hallucination', 'embeddings', 'quantization', 'RLHF'];
   let hi = 0, ci = 0, erasing = false, waiting = false;
-
   function tick() {
     if (document.activeElement === input || input.value) { setTimeout(tick, 400); return; }
     const word = hints[hi];
-    if (waiting) {
-      waiting = false; erasing = true;
-      setTimeout(tick, 80); return;
-    }
+    if (waiting) { waiting = false; erasing = true; setTimeout(tick, 80); return; }
     if (!erasing) {
       ci++;
       input.placeholder = 'try "' + word.slice(0, ci) + '"';
@@ -924,8 +929,7 @@ window.setHeroText = function(el) {
     } else {
       ci--;
       if (ci <= 0) {
-        erasing = false;
-        hi = (hi + 1) % hints.length;
+        erasing = false; hi = (hi + 1) % hints.length;
         input.placeholder = 'search ' + TOTAL + ' tools...';
         setTimeout(tick, 700);
       } else {
@@ -935,8 +939,6 @@ window.setHeroText = function(el) {
     }
   }
   setTimeout(tick, 2200);
-
-  // Init count display
   run();
 })();
 </script>
