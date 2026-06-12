@@ -139,6 +139,39 @@
       padding: 0 32px 64px;
     }
 
+    /* ── GitHub star + Buy Me a Coffee support CTAs ── */
+    .hero-support {
+      display: flex; gap: 10px; flex-wrap: wrap;
+      margin-top: 14px;
+    }
+    .btn-support {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-family: var(--mono); font-size: 11px; font-weight: 700;
+      padding: 6px 14px; border-radius: 99px;
+      text-decoration: none;
+      border: 1px solid rgba(255,255,255,.12);
+      color: var(--muted);
+      background: rgba(255,255,255,.04);
+      transition: border-color .2s, background .2s, color .2s;
+      letter-spacing: .04em;
+    }
+    .btn-support:hover { border-color: rgba(255,255,255,.25); color: var(--text); background: rgba(255,255,255,.07); }
+    .btn-support.btn-coffee { border-color: rgba(245,158,11,.25); color: #f59e0b; background: rgba(245,158,11,.06); }
+    .btn-support.btn-coffee:hover { background: rgba(245,158,11,.12); border-color: rgba(245,158,11,.5); }
+
+    /* ── Comments section ── */
+    .comments-section {
+      max-width: 800px; margin: 0 auto 0; padding: 60px 28px 0;
+    }
+    .comments-heading {
+      font-family: var(--mono); font-size: 13px; font-weight: 700;
+      color: var(--muted); letter-spacing: .1em; text-transform: uppercase;
+      margin-bottom: 20px; display: flex; align-items: center; gap: 12px;
+    }
+    .comments-heading::after {
+      content: ''; flex: 1; height: 1px; background: var(--border);
+    }
+
     /* ── Also by echobash strip ── */
     .also-strip {
       max-width: 1200px;
@@ -286,6 +319,20 @@
       <div class="hero-ctas anim-up-4">
         <a href="llm_decode.html" class="btn btn-primary">what is an LLM? ✦</a>
         <a href="#tools" class="btn btn-ghost" onclick="document.getElementById('tools').scrollIntoView({behavior:'smooth'});return false;">explore tools ↓</a>
+      </div>
+
+      <!-- ── Support CTAs: GitHub star + Buy Me a Coffee ── -->
+      <div class="hero-support anim-up-4">
+        <a href="https://github.com/echobash/largelanguagemodel"
+           target="_blank" rel="noopener"
+           class="btn-support">
+          ⭐ star on GitHub
+        </a>
+        <a href="https://www.buymeacoffee.com/echobash"
+           target="_blank" rel="noopener"
+           class="btn-support btn-coffee">
+          ☕ buy me a coffee
+        </a>
       </div>
       <div class="hero-stats anim-up-4">
         <div>
@@ -632,6 +679,26 @@
     </div>
   </div>
 </div>
+
+<!-- ── Comments section (Utterances — GitHub Issues powered) ──────────────
+     Setup required once:
+       1. Enable Issues on github.com/echobash/largelanguagemodel (Settings → Features → Issues ✓)
+       2. Install the Utterances app: https://github.com/apps/utterances
+          Grant access to this repo.
+     After that, every comment automatically becomes a GitHub Issue.
+     Zero backend, zero database, free forever.
+──────────────────────────────────────────────────────────────────────── -->
+<section class="comments-section">
+  <div class="comments-heading">comments &amp; feedback</div>
+  <script src="https://utteranc.es/client.js"
+          repo="echobash/largelanguagemodel"
+          issue-term="og:title"
+          label="💬 comment"
+          theme="github-dark"
+          crossorigin="anonymous"
+          async>
+  </script>
+</section>
 
 <!-- ── Also by echobash strip ── -->
 <div class="also-strip">
